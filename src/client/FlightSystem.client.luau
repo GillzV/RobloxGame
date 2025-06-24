@@ -162,21 +162,22 @@ local function updateFlight(deltaTime)
 	-- Normalize and apply speed
 	if moveDirection.Magnitude > 0 then
 		moveDirection = moveDirection.Unit * SPEED_TIERS[speedTier + 1]
-		lastMoveDirection = moveDirection
 
 		-- Smoothly rotate character to face movement direction
 		local targetCFrame = CFrame.new(rootPart.Position, rootPart.Position + moveDirection)
 		rootPart.CFrame = rootPart.CFrame:Lerp(targetCFrame, deltaTime * 10)
+
+		-- Apply velocity
+		rootPart.Velocity = moveDirection
 	else
-		moveDirection = lastMoveDirection.Unit * SPEED_TIERS[speedTier + 1] * 0.98 -- Slight deceleration when not pressing keys
+		-- When not moving, stop completely
+		rootPart.Velocity = Vector3.new(0, 0, 0)
+		speedTier = 0
+		updateAnimation()
 	end
 
-	-- Apply velocity with some dampening
-	rootPart.Velocity = moveDirection
+	-- Keep character from rotating randomly
 	rootPart.RotVelocity = Vector3.new(0, 0, 0)
-
-	-- Update animations and effects
-	updateAnimation()
 end
 
 -- Input handling
