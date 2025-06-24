@@ -2,6 +2,7 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
@@ -12,11 +13,11 @@ local camera = workspace.CurrentCamera
 -- Animation setup
 local animator = humanoid:WaitForChild("Animator")
 local idleFlightAnimation = Instance.new("Animation")
-idleFlightAnimation.AnimationId = "rbxassetid://507766388" -- Replace with your idle flight animation ID
+idleFlightAnimation.AnimationId = "rbxassetid://13771876798" -- Hovering animation
 local fastFlightAnimation = Instance.new("Animation")
-fastFlightAnimation.AnimationId = "rbxassetid://507766951" -- Replace with your fast flight animation ID
+fastFlightAnimation.AnimationId = "rbxassetid://13771890359" -- Superman-style flight
 local hyperFlightAnimation = Instance.new("Animation")
-hyperFlightAnimation.AnimationId = "rbxassetid://507767176" -- Replace with your hyper flight animation ID
+hyperFlightAnimation.AnimationId = "rbxassetid://13771901375" -- Intense flight pose
 
 local idleTrack = animator:LoadAnimation(idleFlightAnimation)
 local fastTrack = animator:LoadAnimation(fastFlightAnimation)
@@ -24,11 +25,40 @@ local hyperTrack = animator:LoadAnimation(hyperFlightAnimation)
 
 -- Flight system variables
 local isFlying = false
-local flySpeed = 50
+local speedTier = 0 -- 0: Base, 1: Fast, 2: Super, 3: Hyper
+local SPEED_TIERS = {
+	100, -- Base flight speed
+	300, -- Fast flight speed
+	600, -- Super flight speed
+	1000, -- Hyper flight speed
+}
+local currentSpeed = SPEED_TIERS[1]
 local currentAnimTrack = nil
 local moveDirection = Vector3.new()
+local lastMoveDirection = Vector3.new()
 
--- Trail effect setup
+-- Visual effects
+local function createSonicBoom()
+	local boom = Instance.new("Part")
+	boom.Shape = Enum.PartType.Ball
+	boom.Size = Vector3.new(1, 1, 1)
+	boom.Material = Enum.Material.Neon
+	boom.Color = Color3.new(1, 1, 1)
+	boom.Transparency = 0.5
+	boom.CanCollide = false
+	boom.CFrame = rootPart.CFrame
+	boom.Parent = workspace
+
+	local tween = TweenService:Create(boom, TweenInfo.new(0.3), {
+		Size = Vector3.new(20, 20, 20),
+		Transparency = 1,
+	})
+	tween:Play()
+
+	game.Debris:AddItem(boom, 0.3)
+end
+
+-- Trail setup with better visuals
 local trailAttachment1 = Instance.new("Attachment")
 trailAttachment1.Position = Vector3.new(-0.5, 0, 0)
 trailAttachment1.Parent = rootPart
@@ -40,12 +70,22 @@ trailAttachment2.Parent = rootPart
 local trail = Instance.new("Trail")
 trail.Attachment0 = trailAttachment1
 trail.Attachment1 = trailAttachment2
-trail.Lifetime = 0.5
+trail.Lifetime = 0.2
 trail.MinLength = 0.1
+trail.MaxLength = 20
+trail.WidthScale = NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 1),
+	NumberSequenceKeypoint.new(1, 0),
+})
+trail.Transparency = NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 0),
+	NumberSequenceKeypoint.new(1, 1),
+})
+trail.Color = ColorSequence.new(Color3.new(1, 1, 1))
 trail.Enabled = false
 trail.Parent = rootPart
 
--- Function to update animations based on speed
+-- Function to update animations based on speed tier
 local function updateAnimation()
 	if not isFlying then
 		if currentAnimTrack then
@@ -56,9 +96,9 @@ local function updateAnimation()
 	end
 
 	local newTrack
-	if flySpeed < 100 then
+	if speedTier == 0 then
 		newTrack = idleTrack
-	elseif flySpeed <= 300 then
+	elseif speedTier == 1 then
 		newTrack = fastTrack
 	else
 		newTrack = hyperTrack
@@ -72,12 +112,17 @@ local function updateAnimation()
 		currentAnimTrack = newTrack
 	end
 
-	-- Update trail visibility based on speed
-	trail.Enabled = flySpeed > 300
+	-- Update trail based on speed tier
+	trail.Enabled = speedTier > 0
+	if speedTier > 0 then
+		local speedRatio = speedTier / 3
+		trail.MaxLength = 5 + (speedRatio * 15)
+		trail.Lifetime = 0.1 + (speedRatio * 0.3)
+	end
 end
 
 -- Function to handle flying
-local function updateFlight()
+local function updateFlight(deltaTime)
 	if not isFlying then
 		return
 	end
@@ -116,18 +161,22 @@ local function updateFlight()
 
 	-- Normalize and apply speed
 	if moveDirection.Magnitude > 0 then
-		moveDirection = moveDirection.Unit * flySpeed
+		moveDirection = moveDirection.Unit * SPEED_TIERS[speedTier + 1]
+		lastMoveDirection = moveDirection
 
 		-- Smoothly rotate character to face movement direction
 		local targetCFrame = CFrame.new(rootPart.Position, rootPart.Position + moveDirection)
-		rootPart.CFrame = rootPart.CFrame:Lerp(targetCFrame, 0.1)
+		rootPart.CFrame = rootPart.CFrame:Lerp(targetCFrame, deltaTime * 10)
 	else
-		moveDirection = Vector3.new(0, 0, 0)
+		moveDirection = lastMoveDirection.Unit * SPEED_TIERS[speedTier + 1] * 0.98 -- Slight deceleration when not pressing keys
 	end
 
-	-- Apply velocity with some dampening to prevent sudden stops
+	-- Apply velocity with some dampening
 	rootPart.Velocity = moveDirection
-	rootPart.RotVelocity = Vector3.new(0, 0, 0) -- Prevent spinning
+	rootPart.RotVelocity = Vector3.new(0, 0, 0)
+
+	-- Update animations and effects
+	updateAnimation()
 end
 
 -- Input handling
@@ -142,17 +191,24 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if isFlying then
 			humanoid:ChangeState(Enum.HumanoidStateType.Physics)
 			humanoid.PlatformStand = true
+			speedTier = 0
+			createSonicBoom()
 			updateAnimation()
 		else
 			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 			humanoid.PlatformStand = false
+			speedTier = 0
 			rootPart.Velocity = Vector3.new(0, 0, 0)
 			rootPart.RotVelocity = Vector3.new(0, 0, 0)
 			trail.Enabled = false
 		end
 	elseif input.KeyCode == Enum.KeyCode.Q and isFlying then
-		flySpeed = flySpeed + 25
-		updateAnimation()
+		-- Increment speed tier and create sonic boom effect
+		if speedTier < 3 then
+			speedTier = speedTier + 1
+			createSonicBoom()
+			updateAnimation()
+		end
 	end
 end)
 
@@ -170,11 +226,12 @@ player.CharacterAdded:Connect(function(newCharacter)
 
 	-- Reset flight state
 	isFlying = false
-	flySpeed = 50
+	speedTier = 0
 	currentAnimTrack = nil
 	moveDirection = Vector3.new()
+	lastMoveDirection = Vector3.new()
 
-	-- Recreate trail attachments
+	-- Recreate trail
 	trailAttachment1 = Instance.new("Attachment")
 	trailAttachment1.Position = Vector3.new(-0.5, 0, 0)
 	trailAttachment1.Parent = rootPart
@@ -186,11 +243,23 @@ player.CharacterAdded:Connect(function(newCharacter)
 	trail = Instance.new("Trail")
 	trail.Attachment0 = trailAttachment1
 	trail.Attachment1 = trailAttachment2
-	trail.Lifetime = 0.5
+	trail.Lifetime = 0.2
 	trail.MinLength = 0.1
+	trail.MaxLength = 20
+	trail.WidthScale = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	trail.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	trail.Color = ColorSequence.new(Color3.new(1, 1, 1))
 	trail.Enabled = false
 	trail.Parent = rootPart
 end)
 
 -- Main flight update loop
-RunService.Heartbeat:Connect(updateFlight)
+RunService.Heartbeat:Connect(function(deltaTime)
+	updateFlight(deltaTime)
+end)
