@@ -198,8 +198,12 @@ local function updateFlight(deltaTime)
 		-- Apply velocity
 		rootPart.Velocity = moveDirection
 	else
-		-- When not moving, stop completely
+		-- When not moving, stop completely and reset speed tier
 		rootPart.Velocity = Vector3.new(0, 0, 0)
+		if speedTier > 0 then
+			speedTier = 0
+			print("Reset to base speed - stopped moving")
+		end
 	end
 
 	-- Keep character from rotating randomly
