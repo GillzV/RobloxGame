@@ -12,16 +12,31 @@ local camera = workspace.CurrentCamera
 
 -- Animation setup
 local animator = humanoid:WaitForChild("Animator")
-local idleFlightAnimation = Instance.new("Animation")
-idleFlightAnimation.AnimationId = "rbxassetid://13771876798" -- Hovering animation
-local fastFlightAnimation = Instance.new("Animation")
-fastFlightAnimation.AnimationId = "rbxassetid://13771890359" -- Superman-style flight
-local hyperFlightAnimation = Instance.new("Animation")
-hyperFlightAnimation.AnimationId = "rbxassetid://13771901375" -- Intense flight pose
 
-local idleTrack = animator:LoadAnimation(idleFlightAnimation)
-local fastTrack = animator:LoadAnimation(fastFlightAnimation)
-local hyperTrack = animator:LoadAnimation(hyperFlightAnimation)
+-- Create animations
+local takeoffAnimation = Instance.new("Animation")
+takeoffAnimation.AnimationId = "rbxassetid://74631654906693" -- Custom takeoff animation
+
+local flyingAnimation = Instance.new("Animation")
+flyingAnimation.AnimationId = "rbxassetid://71254946516017" -- Custom flying animation
+
+-- Load animations and print status
+local function loadAnimation(animation, name)
+	local success, track = pcall(function()
+		return animator:LoadAnimation(animation)
+	end)
+
+	if success and track then
+		print(name .. " animation loaded successfully")
+		return track
+	else
+		warn(name .. " animation failed to load")
+		return nil
+	end
+end
+
+local takeoffTrack = loadAnimation(takeoffAnimation, "Takeoff")
+local flyingTrack = loadAnimation(flyingAnimation, "Flying")
 
 -- Flight system variables
 local isFlying = false
@@ -85,39 +100,52 @@ trail.Color = ColorSequence.new(Color3.new(1, 1, 1))
 trail.Enabled = false
 trail.Parent = rootPart
 
--- Function to update animations based on speed tier
+-- Function to update animations based on movement
 local function updateAnimation()
 	if not isFlying then
-		if currentAnimTrack then
-			currentAnimTrack:Stop()
-			currentAnimTrack = nil
+		if flyingTrack.IsPlaying then
+			flyingTrack:Stop()
 		end
 		return
 	end
 
-	local newTrack
-	if speedTier == 0 then
-		newTrack = idleTrack
-	elseif speedTier == 1 then
-		newTrack = fastTrack
-	else
-		newTrack = hyperTrack
-	end
-
-	if currentAnimTrack ~= newTrack then
-		if currentAnimTrack then
-			currentAnimTrack:Stop()
+	-- Check if we're moving
+	if moveDirection.Magnitude > 0 then
+		-- If we're moving and animation isn't playing, start it
+		if not flyingTrack.IsPlaying then
+			flyingTrack:Play()
 		end
-		newTrack:Play()
-		currentAnimTrack = newTrack
+		-- Adjust animation speed based on speed tier
+		local speedMultiplier = 1 + (speedTier * 0.5) -- 1.0x, 1.5x, 2.0x, 2.5x speed
+		flyingTrack:AdjustSpeed(speedMultiplier)
+	else
+		-- If we're not moving, stop the animation
+		if flyingTrack.IsPlaying then
+			flyingTrack:Stop()
+		end
 	end
+end
 
-	-- Update trail based on speed tier
-	trail.Enabled = speedTier > 0
-	if speedTier > 0 then
-		local speedRatio = speedTier / 3
-		trail.MaxLength = 5 + (speedRatio * 15)
-		trail.Lifetime = 0.1 + (speedRatio * 0.3)
+-- Function to play takeoff animation
+local function playTakeoffAnimation()
+	print("Attempting to play takeoff animation...")
+	if takeoffTrack then
+		print("Found takeoff track, playing animation...")
+		local success, err = pcall(function()
+			takeoffTrack:Play()
+		end)
+		if success then
+			print("Successfully started takeoff animation!")
+			-- Wait for takeoff animation to finish
+			task.delay(takeoffTrack.Length, function()
+				print("Takeoff animation finished")
+				takeoffTrack:Stop()
+			end)
+		else
+			warn("Failed to play takeoff animation:", err)
+		end
+	else
+		warn("No takeoff track available!")
 	end
 end
 
@@ -172,12 +200,13 @@ local function updateFlight(deltaTime)
 	else
 		-- When not moving, stop completely
 		rootPart.Velocity = Vector3.new(0, 0, 0)
-		speedTier = 0
-		updateAnimation()
 	end
 
 	-- Keep character from rotating randomly
 	rootPart.RotVelocity = Vector3.new(0, 0, 0)
+
+	-- Update animations based on movement
+	updateAnimation()
 end
 
 -- Input handling
@@ -192,13 +221,15 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if isFlying then
 			humanoid:ChangeState(Enum.HumanoidStateType.Physics)
 			humanoid.PlatformStand = true
-			speedTier = 0
+			playTakeoffAnimation()
 			createSonicBoom()
-			updateAnimation()
 		else
 			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 			humanoid.PlatformStand = false
 			speedTier = 0
+			if flyingTrack.IsPlaying then
+				flyingTrack:Stop()
+			end
 			rootPart.Velocity = Vector3.new(0, 0, 0)
 			rootPart.RotVelocity = Vector3.new(0, 0, 0)
 			trail.Enabled = false
@@ -208,7 +239,10 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if speedTier < 3 then
 			speedTier = speedTier + 1
 			createSonicBoom()
-			updateAnimation()
+			-- Only update animation if we're moving
+			if moveDirection.Magnitude > 0 then
+				updateAnimation()
+			end
 		end
 	end
 end)
@@ -221,16 +255,13 @@ player.CharacterAdded:Connect(function(newCharacter)
 	animator = humanoid:WaitForChild("Animator")
 
 	-- Reload animations
-	idleTrack = animator:LoadAnimation(idleFlightAnimation)
-	fastTrack = animator:LoadAnimation(fastFlightAnimation)
-	hyperTrack = animator:LoadAnimation(hyperFlightAnimation)
+	takeoffTrack = loadAnimation(takeoffAnimation, "Takeoff")
+	flyingTrack = loadAnimation(flyingAnimation, "Flying")
 
 	-- Reset flight state
 	isFlying = false
 	speedTier = 0
-	currentAnimTrack = nil
 	moveDirection = Vector3.new()
-	lastMoveDirection = Vector3.new()
 
 	-- Recreate trail
 	trailAttachment1 = Instance.new("Attachment")
