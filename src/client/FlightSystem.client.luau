@@ -15,10 +15,13 @@ local animator = humanoid:WaitForChild("Animator")
 
 -- Create animations
 local takeoffAnimation = Instance.new("Animation")
-takeoffAnimation.AnimationId = "rbxassetid://74631654906693" -- Custom takeoff animation
+takeoffAnimation.AnimationId = "rbxassetid://121854059637133" -- Custom takeoff animation
 
 local flyingAnimation = Instance.new("Animation")
 flyingAnimation.AnimationId = "rbxassetid://71254946516017" -- Custom flying animation
+
+local idleFlyingAnimation = Instance.new("Animation")
+idleFlyingAnimation.AnimationId = "rbxassetid://113431342359376" -- New idle flying animation for initial speed and idle
 
 -- Load animations and print status
 local function loadAnimation(animation, name)
@@ -37,6 +40,14 @@ end
 
 local takeoffTrack = loadAnimation(takeoffAnimation, "Takeoff")
 local flyingTrack = loadAnimation(flyingAnimation, "Flying")
+local idleFlyingTrack = loadAnimation(idleFlyingAnimation, "Idle Flying")
+
+-- Debug: Check if idle flying track loaded
+if idleFlyingTrack then
+	print("Idle flying track loaded successfully")
+else
+	warn("Idle flying track failed to load!")
+end
 
 -- Flight system variables
 local isFlying = false
@@ -54,6 +65,7 @@ local lastMoveDirection = Vector3.new()
 
 -- Visual effects
 local function createSonicBoom()
+	-- Create visual boom effect
 	local boom = Instance.new("Part")
 	boom.Shape = Enum.PartType.Ball
 	boom.Size = Vector3.new(1, 1, 1)
@@ -71,6 +83,74 @@ local function createSonicBoom()
 	tween:Play()
 
 	game.Debris:AddItem(boom, 0.3)
+
+	-- Create and play sonic boom sound with better error handling
+	print("Creating sonic boom sound...")
+
+	local sound = Instance.new("Sound")
+	-- Try the original ID first, if it doesn't work we'll try a fallback
+	sound.SoundId = "rbxassetid://112171797165153"
+	sound.Volume = 1.0
+	sound.Parent = rootPart
+
+	-- Also try a fallback sound ID in case the original doesn't work
+	local fallbackSound = Instance.new("Sound")
+	fallbackSound.SoundId = "rbxassetid://131113322" -- This is a known working sound ID
+	fallbackSound.Volume = 1.0
+	fallbackSound.Parent = rootPart
+
+	-- Try to play immediately
+	local playSuccess, playError = pcall(function()
+		sound:Play()
+	end)
+
+	if playSuccess then
+		print("Sonic boom sound started playing immediately")
+	else
+		print("Failed to play immediately, trying fallback sound...")
+		warn("Play error:", playError)
+
+		-- Try the fallback sound
+		local fallbackSuccess, fallbackError = pcall(function()
+			fallbackSound:Play()
+		end)
+
+		if fallbackSuccess then
+			print("Fallback sound started playing immediately")
+		else
+			print("Both sounds failed, trying to wait for load...")
+			warn("Fallback play error:", fallbackError)
+
+			-- If both immediate plays fail, wait for load
+			sound.Loaded:Connect(function()
+				print("Original sound loaded, attempting to play...")
+				local retrySuccess, retryError = pcall(function()
+					sound:Play()
+				end)
+				if retrySuccess then
+					print("Original sonic boom sound playing after load!")
+				else
+					warn("Failed to play original after load:", retryError)
+				end
+			end)
+
+			fallbackSound.Loaded:Connect(function()
+				print("Fallback sound loaded, attempting to play...")
+				local retrySuccess, retryError = pcall(function()
+					fallbackSound:Play()
+				end)
+				if retrySuccess then
+					print("Fallback sound playing after load!")
+				else
+					warn("Failed to play fallback after load:", retryError)
+				end
+			end)
+		end
+	end
+
+	-- Clean up sounds after they finish
+	game.Debris:AddItem(sound, 5)
+	game.Debris:AddItem(fallbackSound, 5)
 end
 
 -- Trail setup with better visuals
@@ -106,22 +186,57 @@ local function updateAnimation()
 		if flyingTrack.IsPlaying then
 			flyingTrack:Stop()
 		end
+		if idleFlyingTrack and idleFlyingTrack.IsPlaying then
+			idleFlyingTrack:Stop()
+		end
 		return
 	end
 
+	-- Debug: Print current state
+	print(
+		"Animation Update - isFlying:",
+		isFlying,
+		"speedTier:",
+		speedTier,
+		"moveDirection.Magnitude:",
+		moveDirection.Magnitude
+	)
+
 	-- Check if we're moving
 	if moveDirection.Magnitude > 0 then
-		-- If we're moving and animation isn't playing, start it
-		if not flyingTrack.IsPlaying then
-			flyingTrack:Play()
+		-- If we're moving, check speed tier
+		if speedTier == 0 then
+			-- At initial speed, use the new idle flying animation
+			if not idleFlyingTrack.IsPlaying then
+				idleFlyingTrack:Play()
+			end
+			-- Stop regular flying animation if it's playing
+			if flyingTrack.IsPlaying then
+				flyingTrack:Stop()
+			end
+		else
+			-- At higher speeds, use the regular flying animation
+			if not flyingTrack.IsPlaying then
+				flyingTrack:Play()
+			end
+			-- Stop idle animation if it's playing
+			if idleFlyingTrack and idleFlyingTrack.IsPlaying then
+				print("Stopping idle flying animation - higher speed tier")
+				idleFlyingTrack:Stop()
+			end
+			-- Adjust animation speed based on speed tier
+			local speedMultiplier = 1 + (speedTier * 0.5) -- 1.0x, 1.5x, 2.0x, 2.5x speed
+			flyingTrack:AdjustSpeed(speedMultiplier)
 		end
-		-- Adjust animation speed based on speed tier
-		local speedMultiplier = 1 + (speedTier * 0.5) -- 1.0x, 1.5x, 2.0x, 2.5x speed
-		flyingTrack:AdjustSpeed(speedMultiplier)
 	else
-		-- If we're not moving, stop the animation
+		-- If we're not moving, always use the new idle flying animation
 		if flyingTrack.IsPlaying then
 			flyingTrack:Stop()
+		end
+		-- Play idle flying animation if not already playing
+		if idleFlyingTrack and not idleFlyingTrack.IsPlaying then
+			print("Playing idle flying animation (112074359619626)")
+			idleFlyingTrack:Play()
 		end
 	end
 end
@@ -198,7 +313,7 @@ local function updateFlight(deltaTime)
 		-- Apply velocity
 		rootPart.Velocity = moveDirection
 	else
-		-- When not moving, stop completely and reset speed tier
+		-- When not moving, hover in place
 		rootPart.Velocity = Vector3.new(0, 0, 0)
 		if speedTier > 0 then
 			speedTier = 0
@@ -226,13 +341,15 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			humanoid:ChangeState(Enum.HumanoidStateType.Physics)
 			humanoid.PlatformStand = true
 			playTakeoffAnimation()
-			createSonicBoom()
 		else
 			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 			humanoid.PlatformStand = false
 			speedTier = 0
 			if flyingTrack.IsPlaying then
 				flyingTrack:Stop()
+			end
+			if idleFlyingTrack.IsPlaying then
+				idleFlyingTrack:Stop()
 			end
 			rootPart.Velocity = Vector3.new(0, 0, 0)
 			rootPart.RotVelocity = Vector3.new(0, 0, 0)
@@ -242,11 +359,14 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		-- Increment speed tier and create sonic boom effect
 		if speedTier < 3 then
 			speedTier = speedTier + 1
+			print("Q pressed - Speed tier increased to:", speedTier)
 			createSonicBoom()
 			-- Only update animation if we're moving
 			if moveDirection.Magnitude > 0 then
 				updateAnimation()
 			end
+		else
+			print("Q pressed - Already at max speed tier")
 		end
 	end
 end)
@@ -261,6 +381,14 @@ player.CharacterAdded:Connect(function(newCharacter)
 	-- Reload animations
 	takeoffTrack = loadAnimation(takeoffAnimation, "Takeoff")
 	flyingTrack = loadAnimation(flyingAnimation, "Flying")
+	idleFlyingTrack = loadAnimation(idleFlyingAnimation, "Idle Flying")
+
+	-- Debug: Check if idle flying track loaded after respawn
+	if idleFlyingTrack then
+		print("Idle flying track reloaded successfully after respawn")
+	else
+		warn("Idle flying track failed to reload after respawn!")
+	end
 
 	-- Reset flight state
 	isFlying = false
