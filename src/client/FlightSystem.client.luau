@@ -53,15 +53,48 @@ end
 local isFlying = false
 local speedTier = 0 -- 0: Base, 1: Fast, 2: Super, 3: Hyper
 local SPEED_TIERS = {
-	100, -- Base flight speed
-	300, -- Fast flight speed
+	35, -- Base flight speed
+	150, -- Fast flight speed
 	600, -- Super flight speed
-	1000, -- Hyper flight speed
+	1200, -- Hyper flight speed
 }
 local currentSpeed = SPEED_TIERS[1]
 local currentAnimTrack = nil
 local moveDirection = Vector3.new()
 local lastMoveDirection = Vector3.new()
+
+-- Wind sound system
+local windSound = nil
+local function createWindSound()
+	windSound = Instance.new("Sound")
+	windSound.SoundId = "rbxassetid://131113322" -- Wind sound ID
+	windSound.Volume = 0.3
+	windSound.Looped = true
+	windSound.Parent = rootPart
+	windSound:Play()
+end
+
+local function updateWindSound()
+	if not windSound then
+		return
+	end
+
+	-- Adjust volume based on speed tier
+	local volume = 0.1 + (speedTier * 0.2) -- 0.1, 0.3, 0.5, 0.7
+	windSound.Volume = volume
+
+	-- Adjust pitch based on speed
+	local pitch = 0.8 + (speedTier * 0.3) -- 0.8, 1.1, 1.4, 1.7
+	windSound.PlaybackSpeed = pitch
+end
+
+local function stopWindSound()
+	if windSound then
+		windSound:Stop()
+		windSound:Destroy()
+		windSound = nil
+	end
+end
 
 -- Visual effects
 local function createSonicBoom()
@@ -326,6 +359,9 @@ local function updateFlight(deltaTime)
 
 	-- Update animations based on movement
 	updateAnimation()
+
+	-- Update wind sound
+	updateWindSound()
 end
 
 -- Input handling
@@ -338,12 +374,36 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		isFlying = not isFlying
 
 		if isFlying then
+			-- Immediately get airborne by applying upward velocity
+			rootPart.Velocity = Vector3.new(0, 50, 0)
+
+			-- Switch to flight mode immediately
 			humanoid:ChangeState(Enum.HumanoidStateType.Physics)
 			humanoid.PlatformStand = true
+
+			-- Disable default humanoid animations
+			humanoid.WalkSpeed = 0
+			humanoid.JumpPower = 0
+			humanoid.AutoRotate = false
+			humanoid.AutoJumpEnabled = false
+
+			-- Stop all currently playing animations
+			for _, track in pairs(animator:GetPlayingAnimationTracks()) do
+				track:Stop()
+			end
+
+			-- Start wind sound
+			createWindSound()
+
 			playTakeoffAnimation()
 		else
 			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 			humanoid.PlatformStand = false
+			-- Restore default humanoid properties
+			humanoid.WalkSpeed = 16
+			humanoid.JumpPower = 50
+			humanoid.AutoRotate = true
+			humanoid.AutoJumpEnabled = true
 			speedTier = 0
 			if flyingTrack.IsPlaying then
 				flyingTrack:Stop()
@@ -354,13 +414,22 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			rootPart.Velocity = Vector3.new(0, 0, 0)
 			rootPart.RotVelocity = Vector3.new(0, 0, 0)
 			trail.Enabled = false
+
+			-- Stop wind sound
+			stopWindSound()
 		end
 	elseif input.KeyCode == Enum.KeyCode.Q and isFlying then
 		-- Increment speed tier and create sonic boom effect
 		if speedTier < 3 then
 			speedTier = speedTier + 1
 			print("Q pressed - Speed tier increased to:", speedTier)
-			createSonicBoom()
+
+			-- Only create sonic boom on speed tiers 2 and 3 (not tier 1)
+			if speedTier >= 2 then
+				createSonicBoom()
+			end
+
+			updateWindSound() -- Update wind sound for new speed
 			-- Only update animation if we're moving
 			if moveDirection.Magnitude > 0 then
 				updateAnimation()
