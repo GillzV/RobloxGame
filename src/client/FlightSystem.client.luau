@@ -346,8 +346,8 @@ local function updateFlight(deltaTime)
 		-- Apply velocity
 		rootPart.Velocity = moveDirection
 	else
-		-- When not moving, hover in place
-		rootPart.Velocity = Vector3.new(0, 0, 0)
+		-- When not moving, hover in place by countering gravity
+		rootPart.Velocity = Vector3.new(0, 2, 0) -- Apply upward force to hover
 		if speedTier > 0 then
 			speedTier = 0
 			print("Reset to base speed - stopped moving")
@@ -386,6 +386,9 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			humanoid.JumpPower = 0
 			humanoid.AutoRotate = false
 			humanoid.AutoJumpEnabled = false
+
+			-- Set initial upward velocity to get airborne
+			rootPart.Velocity = Vector3.new(0, 20, 0)
 
 			-- Stop all currently playing animations
 			for _, track in pairs(animator:GetPlayingAnimationTracks()) do
