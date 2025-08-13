@@ -425,9 +425,10 @@ local function updateFlight(deltaTime)
 	end
 
 	-- Up/Down
-	if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-		moveDirection = moveDirection + upVector
-	end
+	-- Removed space key flying up functionality
+	-- if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+	--     moveDirection = moveDirection + upVector
+	-- end
 	-- Removed shift key flying down functionality
 	-- if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
 	--     moveDirection = moveDirection - upVector
