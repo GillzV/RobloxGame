@@ -438,9 +438,23 @@ local function updateFlight(deltaTime)
 	if moveDirection.Magnitude > 0 then
 		moveDirection = moveDirection.Unit * SPEED_TIERS[speedTier + 1]
 
-		-- Smoothly rotate character to face movement direction
-		local targetCFrame = CFrame.new(rootPart.Position, rootPart.Position + moveDirection)
-		rootPart.CFrame = rootPart.CFrame:Lerp(targetCFrame, deltaTime * 10)
+		-- Check if shift lock is active (camera is locked to character)
+		local isShiftLocked = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+			or camera.CameraType == Enum.CameraType.Scriptable
+
+		if isShiftLocked then
+			-- When shift locked: face camera direction (mouse direction)
+			local cameraLookVector = camera.CFrame.LookVector
+			local targetCFrame = CFrame.new(
+				rootPart.Position,
+				rootPart.Position + Vector3.new(cameraLookVector.X, 0, cameraLookVector.Z)
+			)
+			rootPart.CFrame = rootPart.CFrame:Lerp(targetCFrame, deltaTime * 10)
+		else
+			-- When NOT shift locked: face movement direction (WASD direction)
+			local targetCFrame = CFrame.new(rootPart.Position, rootPart.Position + moveDirection)
+			rootPart.CFrame = rootPart.CFrame:Lerp(targetCFrame, deltaTime * 10)
+		end
 
 		-- Apply velocity
 		rootPart.Velocity = moveDirection
