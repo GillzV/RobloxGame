@@ -33,6 +33,7 @@ local function createBuilding(position, size)
 
 	-- Main structure
 	local mainStructure = Instance.new("Part")
+	mainStructure.Name = "MainStructure"
 	mainStructure.Size = size
 	mainStructure.Position = position + Vector3.new(0, size.Y / 2, 0)
 	mainStructure.Anchored = true

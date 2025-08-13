@@ -14,14 +14,11 @@ local camera = workspace.CurrentCamera
 local animator = humanoid:WaitForChild("Animator")
 
 -- Create animations
-local takeoffAnimation = Instance.new("Animation")
-takeoffAnimation.AnimationId = "rbxassetid://121854059637133" -- Custom takeoff animation
-
 local flyingAnimation = Instance.new("Animation")
 flyingAnimation.AnimationId = "rbxassetid://71254946516017" -- Custom flying animation
 
 local idleFlyingAnimation = Instance.new("Animation")
-idleFlyingAnimation.AnimationId = "rbxassetid://113431342359376" -- New idle flying animation for initial speed and idle
+idleFlyingAnimation.AnimationId = "rbxassetid://138495817843421" -- New idle flying animation for initial speed and idle
 
 -- Load animations and print status
 local function loadAnimation(animation, name)
@@ -38,7 +35,6 @@ local function loadAnimation(animation, name)
 	end
 end
 
-local takeoffTrack = loadAnimation(takeoffAnimation, "Takeoff")
 local flyingTrack = loadAnimation(flyingAnimation, "Flying")
 local idleFlyingTrack = loadAnimation(idleFlyingAnimation, "Idle Flying")
 
@@ -58,43 +54,167 @@ local SPEED_TIERS = {
 	600, -- Super flight speed
 	1200, -- Hyper flight speed
 }
-local currentSpeed = SPEED_TIERS[1]
-local currentAnimTrack = nil
+-- Removed unused: currentSpeed/currentAnimTrack
 local moveDirection = Vector3.new()
-local lastMoveDirection = Vector3.new()
+-- Removed unused: lastMoveDirection
 
--- Wind sound system
-local windSound = nil
-local function createWindSound()
-	windSound = Instance.new("Sound")
-	windSound.SoundId = "rbxassetid://131113322" -- Wind sound ID
-	windSound.Volume = 0.3
-	windSound.Looped = true
-	windSound.Parent = rootPart
-	windSound:Play()
+-- RbxCharacterSounds control
+
+-- Function to find and control RbxCharacterSounds
+local function setupRbxCharacterSounds()
+	-- RbxCharacterSounds is a built-in Roblox script that gets added automatically
+	-- We'll look for the sounds it creates rather than the script itself
+	print("Setting up RbxCharacterSounds control...")
+
+	-- Wait for the script to load and find running sounds
+	spawn(function()
+		wait(1) -- Give time for the script to initialize
+
+		-- Look for running sounds in the character
+		if character then
+			local humanoid = character:FindFirstChild("Humanoid")
+			if humanoid then
+				-- The running sounds are typically created by RbxCharacterSounds
+				-- We'll control them by monitoring the humanoid state
+				humanoid.StateChanged:Connect(function(_, newState)
+					if isFlying then
+						-- Disable running sounds when flying - check multiple states
+						if
+							newState == Enum.HumanoidStateType.Running
+							or newState == Enum.HumanoidStateType.Climbing
+						then
+							-- Force the humanoid to not be in running states when flying
+							humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+
+							-- Also immediately stop any running sounds
+							for _, sound in pairs(character:GetDescendants()) do
+								if
+									sound:IsA("Sound")
+									and (
+										sound.Name:lower():find("footstep")
+										or sound.Name:lower():find("run")
+										or sound.Name:lower():find("walk")
+									)
+								then
+									sound:Stop()
+								end
+							end
+						end
+					end
+				end)
+				print("RbxCharacterSounds control setup complete")
+			end
+		end
+	end)
 end
 
-local function updateWindSound()
-	if not windSound then
-		return
+-- Function to disable running sounds
+local function disableRunningSounds()
+	if character then
+		local humanoid = character:FindFirstChild("Humanoid")
+		if humanoid then
+			-- Force physics state to stop all running sounds immediately
+			humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+
+			-- Stop any currently playing running sounds by finding and stopping them
+			for _, sound in pairs(character:GetDescendants()) do
+				if
+					sound:IsA("Sound")
+					and (
+						sound.Name:lower():find("footstep")
+						or sound.Name:lower():find("run")
+						or sound.Name:lower():find("walk")
+					)
+				then
+					sound:Stop()
+				end
+			end
+
+			-- Stop any sounds in the humanoid root part that might be running sounds
+			if rootPart then
+				for _, sound in pairs(rootPart:GetChildren()) do
+					if
+						sound:IsA("Sound")
+						and (
+							sound.Name:lower():find("footstep")
+							or sound.Name:lower():find("run")
+							or sound.Name:lower():find("walk")
+						)
+					then
+						sound:Stop()
+					end
+				end
+			end
+		end
+	end
+end
+
+-- Function to enable running sounds
+local function enableRunningSounds()
+	if character then
+		local humanoid = character:FindFirstChild("Humanoid")
+		if humanoid then
+			-- Allow normal running state when touching ground
+			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+		end
+	end
+end
+
+-- Continuous monitoring to prevent running sounds while flying
+local runningSoundMonitor = nil
+local function startRunningSoundMonitor()
+	if runningSoundMonitor then
+		runningSoundMonitor:Disconnect()
 	end
 
-	-- Adjust volume based on speed tier
-	local volume = 0.1 + (speedTier * 0.2) -- 0.1, 0.3, 0.5, 0.7
-	windSound.Volume = volume
+	runningSoundMonitor = RunService.Heartbeat:Connect(function()
+		if isFlying and character then
+			-- Continuously force physics state and stop any running sounds
+			local humanoid = character:FindFirstChild("Humanoid")
+			if humanoid and humanoid.MoveDirection.Magnitude > 0 then
+				humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+			end
 
-	-- Adjust pitch based on speed
-	local pitch = 0.8 + (speedTier * 0.3) -- 0.8, 1.1, 1.4, 1.7
-	windSound.PlaybackSpeed = pitch
+			-- Stop any running sounds that might be playing
+			for _, sound in pairs(character:GetDescendants()) do
+				if
+					sound:IsA("Sound")
+					and sound.IsPlaying
+					and (
+						sound.Name:lower():find("footstep")
+						or sound.Name:lower():find("run")
+						or sound.Name:lower():find("walk")
+					)
+				then
+					sound:Stop()
+				end
+			end
+		end
+	end)
 end
 
-local function stopWindSound()
-	if windSound then
-		windSound:Stop()
-		windSound:Destroy()
-		windSound = nil
+local function stopRunningSoundMonitor()
+	if runningSoundMonitor then
+		runningSoundMonitor:Disconnect()
+		runningSoundMonitor = nil
 	end
 end
+
+-- Player stats integration
+local remotes = ReplicatedStorage:WaitForChild("Remotes")
+local updateStatsEvent = remotes:WaitForChild("UpdateStats")
+local addExperienceEvent = remotes:WaitForChild("AddExperience")
+local addCoinsEvent = remotes:WaitForChild("AddCoins")
+
+local maxSpeedTier = 1 -- Default to 1 boost
+
+-- Listen for stats updates
+updateStatsEvent.OnClientEvent:Connect(function(stats)
+	maxSpeedTier = stats.maxSpeedTier
+	print("Updated max speed tier to:", maxSpeedTier)
+end)
+
+-- Wind sound handled via built-in RbxCharacterSounds (FreeFalling) when flying
 
 -- Visual effects
 local function createSonicBoom()
@@ -274,29 +394,6 @@ local function updateAnimation()
 	end
 end
 
--- Function to play takeoff animation
-local function playTakeoffAnimation()
-	print("Attempting to play takeoff animation...")
-	if takeoffTrack then
-		print("Found takeoff track, playing animation...")
-		local success, err = pcall(function()
-			takeoffTrack:Play()
-		end)
-		if success then
-			print("Successfully started takeoff animation!")
-			-- Wait for takeoff animation to finish
-			task.delay(takeoffTrack.Length, function()
-				print("Takeoff animation finished")
-				takeoffTrack:Stop()
-			end)
-		else
-			warn("Failed to play takeoff animation:", err)
-		end
-	else
-		warn("No takeoff track available!")
-	end
-end
-
 -- Function to handle flying
 local function updateFlight(deltaTime)
 	if not isFlying then
@@ -331,9 +428,10 @@ local function updateFlight(deltaTime)
 	if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
 		moveDirection = moveDirection + upVector
 	end
-	if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
-		moveDirection = moveDirection - upVector
-	end
+	-- Removed shift key flying down functionality
+	-- if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+	--     moveDirection = moveDirection - upVector
+	-- end
 
 	-- Normalize and apply speed
 	if moveDirection.Magnitude > 0 then
@@ -360,8 +458,32 @@ local function updateFlight(deltaTime)
 	-- Update animations based on movement
 	updateAnimation()
 
-	-- Update wind sound
-	updateWindSound()
+	-- Wind handled by RbxCharacterSounds
+
+	-- Award experience and coins for flying
+	if isFlying and moveDirection.Magnitude > 0 then
+		-- Award experience based on speed tier
+		local expGain = 1 + speedTier * 2 -- 1 exp for base, 3 for tier 1, 5 for tier 2, etc.
+		addExperienceEvent:FireServer(expGain)
+
+		-- Show XP notification occasionally
+		if math.random(1, 100) <= 10 then -- 10% chance per frame
+			if _G.NotificationSystem then
+				_G.NotificationSystem.showXP(expGain)
+			end
+		end
+
+		-- Award coins occasionally
+		if math.random(1, 100) <= 5 then -- 5% chance per frame
+			local coinGain = 1 + speedTier -- More coins for higher speeds
+			addCoinsEvent:FireServer(coinGain)
+
+			-- Show coin notification
+			if _G.NotificationSystem then
+				_G.NotificationSystem.showCoins(coinGain)
+			end
+		end
+	end
 end
 
 -- Input handling
@@ -395,35 +517,68 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 				track:Stop()
 			end
 
-			-- Start wind sound
-			createWindSound()
+			-- Disable running sounds
+			disableRunningSounds()
 
-			playTakeoffAnimation()
+			-- Start running sound monitor
+			startRunningSoundMonitor()
+
+			-- Tell RbxCharacterSounds that we're flying
+			if _G.setFlyingState then
+				_G.setFlyingState(true)
+			end
+
+			-- Wind handled by RbxCharacterSounds
 		else
+			-- Stop flying - restore normal state
 			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 			humanoid.PlatformStand = false
+
 			-- Restore default humanoid properties
 			humanoid.WalkSpeed = 16
 			humanoid.JumpPower = 50
 			humanoid.AutoRotate = true
 			humanoid.AutoJumpEnabled = true
+
+			-- Reset flight variables
 			speedTier = 0
-			if flyingTrack.IsPlaying then
+			moveDirection = Vector3.new()
+
+			-- Stop all flight animations
+			if flyingTrack and flyingTrack.IsPlaying then
 				flyingTrack:Stop()
 			end
-			if idleFlyingTrack.IsPlaying then
+			if idleFlyingTrack and idleFlyingTrack.IsPlaying then
 				idleFlyingTrack:Stop()
 			end
+
+			-- Reset physics
 			rootPart.Velocity = Vector3.new(0, 0, 0)
 			rootPart.RotVelocity = Vector3.new(0, 0, 0)
-			trail.Enabled = false
 
-			-- Stop wind sound
-			stopWindSound()
+			-- Disable trail
+			if trail then
+				trail.Enabled = false
+			end
+
+			-- Stop running sound monitor
+			stopRunningSoundMonitor()
+
+			-- Enable running sounds
+			enableRunningSounds()
+
+			-- Tell RbxCharacterSounds that we're not flying
+			if _G.setFlyingState then
+				_G.setFlyingState(false)
+			end
+
+			-- Wind handled by RbxCharacterSounds
+
+			print("Flight mode disabled - returned to normal walking")
 		end
 	elseif input.KeyCode == Enum.KeyCode.Q and isFlying then
 		-- Increment speed tier and create sonic boom effect
-		if speedTier < 3 then
+		if speedTier < maxSpeedTier - 1 then
 			speedTier = speedTier + 1
 			print("Q pressed - Speed tier increased to:", speedTier)
 
@@ -432,13 +587,13 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 				createSonicBoom()
 			end
 
-			updateWindSound() -- Update wind sound for new speed
+			-- Wind handled by RbxCharacterSounds
 			-- Only update animation if we're moving
 			if moveDirection.Magnitude > 0 then
 				updateAnimation()
 			end
 		else
-			print("Q pressed - Already at max speed tier")
+			print("Q pressed - Already at max speed tier:", maxSpeedTier)
 		end
 	end
 end)
@@ -450,8 +605,10 @@ player.CharacterAdded:Connect(function(newCharacter)
 	rootPart = character:WaitForChild("HumanoidRootPart")
 	animator = humanoid:WaitForChild("Animator")
 
+	-- Setup RbxCharacterSounds control
+	setupRbxCharacterSounds()
+
 	-- Reload animations
-	takeoffTrack = loadAnimation(takeoffAnimation, "Takeoff")
 	flyingTrack = loadAnimation(flyingAnimation, "Flying")
 	idleFlyingTrack = loadAnimation(idleFlyingAnimation, "Idle Flying")
 
@@ -497,5 +654,6 @@ end)
 
 -- Main flight update loop
 RunService.Heartbeat:Connect(function(deltaTime)
+	-- Wind handled by RbxCharacterSounds
 	updateFlight(deltaTime)
 end)
