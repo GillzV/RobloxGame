@@ -11,7 +11,6 @@ local function testGUI()
 	if _G.NotificationSystem then
 		_G.NotificationSystem.showXP(25)
 		wait(1)
-		_G.NotificationSystem.showCoins(50)
 		wait(1)
 		_G.NotificationSystem.showLevelUp(2)
 		wait(1)
@@ -24,11 +23,9 @@ local function testGUI()
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
 	local remotes = ReplicatedStorage:WaitForChild("Remotes")
 	local addExperienceEvent = remotes:WaitForChild("AddExperience")
-	local addCoinsEvent = remotes:WaitForChild("AddCoins")
 
 	-- Send test data to server
 	addExperienceEvent:FireServer(100)
-	addCoinsEvent:FireServer(200)
 
 	print("GUI test completed!")
 end

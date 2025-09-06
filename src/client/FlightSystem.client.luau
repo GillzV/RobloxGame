@@ -47,12 +47,11 @@ end
 
 -- Flight system variables
 local isFlying = false
-local speedTier = 0 -- 0: Base, 1: Fast, 2: Super, 3: Hyper
+local speedTier = 0 -- 0: Base, 1: Fast, 2: Super
 local SPEED_TIERS = {
-	35, -- Base flight speed
-	150, -- Fast flight speed
-	600, -- Super flight speed
-	1200, -- Hyper flight speed
+	35, -- Base flight speed (Tier 1)
+	55, -- Fast flight speed (Tier 2)
+	85, -- Super flight speed (Tier 3)
 }
 -- Removed unused: currentSpeed/currentAnimTrack
 local moveDirection = Vector3.new()
@@ -204,7 +203,6 @@ end
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local updateStatsEvent = remotes:WaitForChild("UpdateStats")
 local addExperienceEvent = remotes:WaitForChild("AddExperience")
-local addCoinsEvent = remotes:WaitForChild("AddCoins")
 
 local maxSpeedTier = 1 -- Default to 1 boost
 
@@ -475,7 +473,7 @@ local function updateFlight(deltaTime)
 
 	-- Wind handled by RbxCharacterSounds
 
-	-- Award experience and coins for flying
+	-- Award experience for flying
 	if isFlying and moveDirection.Magnitude > 0 then
 		-- Award experience based on speed tier
 		local expGain = 1 + speedTier * 2 -- 1 exp for base, 3 for tier 1, 5 for tier 2, etc.
@@ -485,17 +483,6 @@ local function updateFlight(deltaTime)
 		if math.random(1, 100) <= 10 then -- 10% chance per frame
 			if _G.NotificationSystem then
 				_G.NotificationSystem.showXP(expGain)
-			end
-		end
-
-		-- Award coins occasionally
-		if math.random(1, 100) <= 5 then -- 5% chance per frame
-			local coinGain = 1 + speedTier -- More coins for higher speeds
-			addCoinsEvent:FireServer(coinGain)
-
-			-- Show coin notification
-			if _G.NotificationSystem then
-				_G.NotificationSystem.showCoins(coinGain)
 			end
 		end
 	end
@@ -597,7 +584,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			speedTier = speedTier + 1
 			print("Q pressed - Speed tier increased to:", speedTier)
 
-			-- Only create sonic boom on speed tiers 2 and 3 (not tier 1)
+			-- Only create sonic boom on speed tier 2 and 3 (not tier 1)
 			if speedTier >= 2 then
 				createSonicBoom()
 			end

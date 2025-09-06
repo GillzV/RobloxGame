@@ -70,7 +70,7 @@ function BuildingCollapse.destroyBuilding(building, player)
 	explosion.Parent = workspace
 
 	-- Create multiple debris particles
-	for i = 1, 10 do
+	for _ = 1, 10 do
 		local debris = Instance.new("Part")
 		debris.Size = Vector3.new(math.random(1, 3), math.random(1, 3), math.random(1, 3))
 		debris.Position = building:GetPrimaryPartCFrame().Position
@@ -106,20 +106,16 @@ function BuildingCollapse.destroyBuilding(building, player)
 	-- Remove building model after delay
 	game.Debris:AddItem(building, 3)
 
-	-- Award experience and coins to the player
+	-- Award experience to the player
 	if player then
-		-- Get remote events for awarding experience and coins
+		-- Get remote events for awarding experience
 		local remotes = ReplicatedStorage:WaitForChild("Remotes")
 		local addExperienceEvent = remotes:WaitForChild("AddExperience")
-		local addCoinsEvent = remotes:WaitForChild("AddCoins")
 
 		-- Award experience for destroying building
 		addExperienceEvent:FireClient(player, 50)
 
-		-- Award coins for destroying building
-		addCoinsEvent:FireClient(player, 25)
-
-		print("Building destroyed by player collision! Awarded 50 XP and 25 coins to", player.Name)
+		print("Building destroyed by player collision! Awarded 50 XP to", player.Name)
 	else
 		print("Building destroyed by player collision!")
 	end

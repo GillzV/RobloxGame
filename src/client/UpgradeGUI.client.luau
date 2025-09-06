@@ -35,7 +35,7 @@ speedLabel.Name = "SpeedLabel"
 speedLabel.Size = UDim2.new(1, -10, 0, 25)
 speedLabel.Position = UDim2.new(0, 5, 0, 5)
 speedLabel.BackgroundTransparency = 1
-speedLabel.Text = "SPEED"
+speedLabel.Text = "CURRENT SPEED"
 speedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 speedLabel.TextScaled = true
 speedLabel.Font = Enum.Font.GothamBold
@@ -47,7 +47,7 @@ speedValue.Name = "SpeedValue"
 speedValue.Size = UDim2.new(1, -10, 0, 25)
 speedValue.Position = UDim2.new(0, 5, 0, 30)
 speedValue.BackgroundTransparency = 1
-speedValue.Text = "0 studs/s"
+speedValue.Text = "35 studs/s"
 speedValue.TextColor3 = Color3.fromRGB(0, 200, 255)
 speedValue.TextScaled = true
 speedValue.Font = Enum.Font.Gotham
@@ -61,14 +61,13 @@ local lastTime = tick()
 
 -- Speed tiers from FlightSystem
 local SPEED_TIERS = {
-	35, -- Base flight speed
-	150, -- Fast flight speed
-	600, -- Super flight speed
-	1200, -- Hyper flight speed
+	35, -- Base flight speed (Tier 1)
+	150, -- Fast flight speed (Tier 2)
+	600, -- Super flight speed (Tier 3)
 }
 
--- Function to update speed display
-local function updateSpeedDisplay()
+-- Function to update current speed display
+local function updateCurrentSpeedDisplay()
 	local currentTime = tick()
 	local deltaTime = currentTime - lastTime
 
@@ -81,14 +80,12 @@ local function updateSpeedDisplay()
 		speedValue.Text = math.floor(speed) .. " studs/s"
 
 		-- Update color based on speed tier
-		if speed >= SPEED_TIERS[4] then
-			speedValue.TextColor3 = Color3.fromRGB(255, 0, 255) -- Magenta for hyper speed
-		elseif speed >= SPEED_TIERS[3] then
-			speedValue.TextColor3 = Color3.fromRGB(255, 100, 0) -- Orange for super speed
+		if speed >= SPEED_TIERS[3] then
+			speedValue.TextColor3 = Color3.fromRGB(255, 100, 0) -- Orange for super speed (Tier 3)
 		elseif speed >= SPEED_TIERS[2] then
-			speedValue.TextColor3 = Color3.fromRGB(255, 255, 0) -- Yellow for fast speed
+			speedValue.TextColor3 = Color3.fromRGB(255, 255, 0) -- Yellow for fast speed (Tier 2)
 		elseif speed >= SPEED_TIERS[1] then
-			speedValue.TextColor3 = Color3.fromRGB(0, 200, 255) -- Blue for base speed
+			speedValue.TextColor3 = Color3.fromRGB(0, 200, 255) -- Blue for base speed (Tier 1)
 		else
 			speedValue.TextColor3 = Color3.fromRGB(150, 150, 150) -- Gray for walking
 		end
@@ -106,7 +103,7 @@ player.CharacterAdded:Connect(function(newCharacter)
 	lastTime = tick()
 end)
 
--- Update speed display every frame
-RunService.Heartbeat:Connect(updateSpeedDisplay)
+-- Update current speed display every frame
+RunService.Heartbeat:Connect(updateCurrentSpeedDisplay)
 
-print("Speed Display GUI loaded successfully!")
+print("Current Speed Display GUI loaded successfully!")

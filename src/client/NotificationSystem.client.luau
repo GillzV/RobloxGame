@@ -70,11 +70,6 @@ local function showXPNotification(amount)
 	createNotification("+" .. amount .. " XP", Color3.fromRGB(0, 200, 255), 2)
 end
 
--- Function to show coin gain notification
-local function showCoinNotification(amount)
-	createNotification("+" .. amount .. " Coins", Color3.fromRGB(255, 215, 0), 2)
-end
-
 -- Function to show level up notification
 local function showLevelUpNotification(level)
 	createNotification("LEVEL UP! Level " .. level, Color3.fromRGB(255, 100, 255), 4)
@@ -88,7 +83,6 @@ end
 -- Export functions for other scripts to use
 local NotificationSystem = {
 	showXP = showXPNotification,
-	showCoins = showCoinNotification,
 	showLevelUp = showLevelUpNotification,
 	showUpgrade = showUpgradeNotification,
 	showNotification = createNotification,
