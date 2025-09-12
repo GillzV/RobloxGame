@@ -570,6 +570,12 @@ local function updateFlight(deltaTime)
 	-- Update animations based on movement
 	updateAnimation()
 
+	-- If wind sound is active, adjust volume based on tier (tier 2 < tier 3)
+	if _G.windSound then
+		local targetVolume = (speedBoost >= 2) and 0.8 or 0.25
+		_G.windSound.Volume = targetVolume
+	end
+
 	-- Ensure wind sound only plays on tier 2+
 	if _G.windSound then
 		if (not isFlying) or speedBoost == 0 then
@@ -757,7 +763,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 				print("FlightSystem: Creating wind sound for tier", speedBoost + 1)
 				local windSound = Instance.new("Sound")
 				windSound.SoundId = "rbxasset://sounds/action_falling.ogg"
-				windSound.Volume = 0.6
+				windSound.Volume = (speedBoost >= 2) and 0.8 or 0.35
 				windSound.Looped = true
 				windSound.Parent = rootPart
 
@@ -772,6 +778,9 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 				else
 					warn("FlightSystem: Failed to play wind sound:", error)
 				end
+			elseif speedBoost >= 1 and _G.windSound then
+				-- Adjust volume when tier changes between 2 and 3
+				_G.windSound.Volume = (speedBoost >= 2) and 0.8 or 0.35
 			end
 
 			-- Create sonic boom on max boost level
