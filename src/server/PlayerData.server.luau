@@ -5,87 +5,68 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 -- Create PlayerStats module in ReplicatedStorage
 local PlayerStats = {}
 
+-- ===== CONFIGURABLE SPEED PROGRESSION SETTINGS =====
+local SPEED_CONFIG = {
+	BASE_SPEED = 35, -- Starting max speed
+	SPEED_INCREASE = 1, -- Speed gained per interval (0.1 studs/s every 5 seconds)
+	TIME_INTERVAL = 1, -- Time interval in seconds for speed gain
+	MAX_SPEED_CAP = 1000, -- Maximum possible speed
+}
+-- ===================================================
+
 -- Default player stats
 local DEFAULT_STATS = {
-	level = 1,
-	experience = 0,
-	experienceToNext = 100,
-
-	-- Speed upgrades
-	speedLevel = 1,
-	maxSpeedTier = 1, -- How many times they can boost (starts at 1)
-	speedMultiplier = 1.0,
+	-- Progressive speed system
+	maxSpeed = SPEED_CONFIG.BASE_SPEED, -- Current maximum speed (starts at base speed)
+	flightTime = 0, -- Total time spent flying (for speed progression)
 }
 
--- Experience required for each level (exponential growth)
-local function getExperienceForLevel(level)
-	return math.floor(100 * (1.5 ^ (level - 1)))
-end
+-- Progressive speed calculation
+local function calculateMaxSpeed(flightTime)
+	-- Uses configurable settings for speed progression
+	local baseSpeed = SPEED_CONFIG.BASE_SPEED
+	-- Calculate gradual increase: speed increases by SPEED_INCREASE every TIME_INTERVAL seconds
+	local speedIncrease = (flightTime / SPEED_CONFIG.TIME_INTERVAL) * SPEED_CONFIG.SPEED_INCREASE
+	local maxSpeed = baseSpeed + speedIncrease
 
--- Speed tier unlock requirements
-local function getMaxSpeedTierForLevel(level)
-	if level >= 4 then
-		return 3 -- Max speed tier
-	else
-		return 2 -- Fast flight accessible from level 1
-	end
-end
-
--- Speed multiplier calculation
-local function getSpeedMultiplierForLevel(level)
-	return 1.0 + (level - 1) * 0.2 -- 20% increase per level
+	-- Cap at configured maximum speed
+	return math.min(maxSpeed, SPEED_CONFIG.MAX_SPEED_CAP)
 end
 
 function PlayerStats.new()
 	local stats = table.clone(DEFAULT_STATS)
 
-	-- Calculate initial values
-	stats.maxSpeedTier = getMaxSpeedTierForLevel(stats.level)
-	stats.speedMultiplier = getSpeedMultiplierForLevel(stats.speedLevel)
+	-- Calculate initial max speed
+	stats.maxSpeed = calculateMaxSpeed(stats.flightTime)
 
 	return stats
 end
 
-function PlayerStats.addExperience(stats, amount)
-	stats.experience = stats.experience + amount
+function PlayerStats.addFlightTime(stats, deltaTime)
+	stats.flightTime = stats.flightTime + deltaTime
 
-	-- Check for level up
-	while stats.experience >= stats.experienceToNext do
-		stats.experience = stats.experience - stats.experienceToNext
-		stats.level = stats.level + 1
-		stats.experienceToNext = getExperienceForLevel(stats.level)
-
-		-- Update max speed tier based on new level
-		stats.maxSpeedTier = getMaxSpeedTierForLevel(stats.level)
-
-		print("Level up! New level:", stats.level)
+	-- Update max speed based on new flight time
+	local newMaxSpeed = calculateMaxSpeed(stats.flightTime)
+	if newMaxSpeed > stats.maxSpeed then
+		stats.maxSpeed = newMaxSpeed
+		print("Speed increased! New max speed:", stats.maxSpeed)
 	end
 end
 
-function PlayerStats.upgradeSpeed(stats)
-	stats.speedLevel = stats.speedLevel + 1
-	stats.speedMultiplier = getSpeedMultiplierForLevel(stats.speedLevel)
-	return true
+function PlayerStats.updateMaxSpeedFromActual(stats, actualSpeed)
+	-- Disabled actual speed tracking - only use time-based progression
+	-- This function is kept for compatibility but does nothing
+	return false
 end
 
-function PlayerStats.getSpeedTiers(stats)
-	local baseSpeed = 35
-	local tiers = {}
-
-	for i = 1, stats.maxSpeedTier do
-		tiers[i] = math.floor(baseSpeed * stats.speedMultiplier * (1.5 ^ (i - 1)))
-	end
-
-	return tiers
+function PlayerStats.getMaxSpeed(stats)
+	local maxSpeed = stats.maxSpeed or SPEED_CONFIG.BASE_SPEED
+	-- Ensure it doesn't exceed the cap
+	return math.min(maxSpeed, SPEED_CONFIG.MAX_SPEED_CAP)
 end
 
--- Helper functions for server
-function PlayerStats.getMaxSpeedTierForLevel(level)
-	return getMaxSpeedTierForLevel(level)
-end
-
-function PlayerStats.getSpeedMultiplierForLevel(level)
-	return getSpeedMultiplierForLevel(level)
+function PlayerStats.getFlightTime(stats)
+	return stats.flightTime or 0
 end
 
 local PlayerData = {}
@@ -106,15 +87,31 @@ local upgradeSpeedEvent = Instance.new("RemoteEvent")
 upgradeSpeedEvent.Name = "UpgradeSpeed"
 upgradeSpeedEvent.Parent = remotes
 
-local addExperienceEvent = Instance.new("RemoteEvent")
-addExperienceEvent.Name = "AddExperience"
-addExperienceEvent.Parent = remotes
+local addFlightTimeEvent = Instance.new("RemoteEvent")
+addFlightTimeEvent.Name = "AddFlightTime"
+addFlightTimeEvent.Parent = remotes
+
+local updateActualSpeedEvent = Instance.new("RemoteEvent")
+updateActualSpeedEvent.Name = "UpdateActualSpeed"
+updateActualSpeedEvent.Parent = remotes
+
+local toggleFlightEvent = Instance.new("RemoteEvent")
+toggleFlightEvent.Name = "ToggleFlight"
+toggleFlightEvent.Parent = remotes
 
 -- Player data cache
 local playerStats = {}
 
 -- Load player data from DataStore
 local function loadPlayerData(player)
+	-- Skip DataStore operations in Studio to avoid API access errors
+	if game:GetService("RunService"):IsStudio() then
+		print("Studio mode: Using default stats for player:", player.Name)
+		local newStats = PlayerStats.new()
+		playerStats[player.UserId] = newStats
+		return newStats
+	end
+
 	local success, data = pcall(function()
 		return playerDataStore:GetAsync(player.UserId)
 	end)
@@ -129,8 +126,7 @@ local function loadPlayerData(player)
 		end
 
 		-- Recalculate derived values
-		data.maxSpeedTier = PlayerStats.getMaxSpeedTierForLevel(data.level)
-		data.speedMultiplier = PlayerStats.getSpeedMultiplierForLevel(data.speedLevel)
+		data.maxSpeed = PlayerStats.getMaxSpeed(data)
 
 		playerStats[player.UserId] = data
 		print("Loaded data for player:", player.Name)
@@ -146,6 +142,12 @@ end
 
 -- Save player data to DataStore
 local function savePlayerData(player)
+	-- Skip DataStore operations in Studio to avoid API access errors
+	if game:GetService("RunService"):IsStudio() then
+		print("Studio mode: Skipping DataStore save for player:", player.Name)
+		return
+	end
+
 	local data = playerStats[player.UserId]
 	if data then
 		local success, err = pcall(function()
@@ -199,24 +201,25 @@ spawn(function()
 	end
 end)
 
--- Handle upgrade requests from client
-upgradeSpeedEvent.OnServerEvent:Connect(function(player)
+-- Handle flight time gain
+addFlightTimeEvent.OnServerEvent:Connect(function(player, deltaTime)
 	local data = playerStats[player.UserId]
-	if data and PlayerStats.upgradeSpeed(data) then
+	if data then
+		PlayerStats.addFlightTime(data, deltaTime)
 		updateClientStats(player)
-		print(player.Name, "upgraded speed to level", data.speedLevel)
-	else
-		print(player.Name, "failed to upgrade speed")
+		print(player.Name, "added", deltaTime, "seconds of flight time, max speed:", data.maxSpeed)
 	end
 end)
 
--- Handle experience gain
-addExperienceEvent.OnServerEvent:Connect(function(player, amount)
+-- Handle actual speed updates
+updateActualSpeedEvent.OnServerEvent:Connect(function(player, actualSpeed)
 	local data = playerStats[player.UserId]
 	if data then
-		PlayerStats.addExperience(data, amount)
-		updateClientStats(player)
-		print(player.Name, "gained", amount, "experience")
+		local speedUpdated = PlayerStats.updateMaxSpeedFromActual(data, actualSpeed)
+		if speedUpdated then
+			updateClientStats(player)
+			print(player.Name, "max speed updated to", data.maxSpeed, "from actual speed", actualSpeed)
+		end
 	end
 end)
 
@@ -225,11 +228,11 @@ function PlayerData.getPlayerStats(player)
 	return playerStats[player.UserId]
 end
 
--- Function to add experience (for other server scripts)
-function PlayerData.addExperience(player, amount)
+-- Function to add flight time (for other server scripts)
+function PlayerData.addFlightTime(player, deltaTime)
 	local data = playerStats[player.UserId]
 	if data then
-		PlayerStats.addExperience(data, amount)
+		PlayerStats.addFlightTime(data, deltaTime)
 		updateClientStats(player)
 		return true
 	end

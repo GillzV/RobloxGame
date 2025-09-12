@@ -2,87 +2,62 @@
 
 local PlayerStats = {}
 
+-- ===== CONFIGURABLE SPEED PROGRESSION SETTINGS =====
+local SPEED_CONFIG = {
+	BASE_SPEED = 35, -- Starting max speed
+	SPEED_INCREASE = 1, -- Speed gained per interval (1 studs/s every 1 second)
+	TIME_INTERVAL = 1, -- Time interval in seconds for speed gain
+	MAX_SPEED_CAP = 1000, -- Maximum possible speed
+}
+-- ===================================================
+
 -- Default player stats
 local DEFAULT_STATS = {
-	level = 1,
-	experience = 0,
-	experienceToNext = 100,
-
-	-- Speed upgrades
-	speedLevel = 1,
-	maxSpeedTier = 1, -- How many times they can boost (starts at 1)
-	speedMultiplier = 1.0,
+	-- Progressive speed system
+	maxSpeed = SPEED_CONFIG.BASE_SPEED, -- Current maximum speed (starts at base speed)
+	flightTime = 0, -- Total time spent flying (for speed progression)
 }
 
--- Experience required for each level (exponential growth)
-local function getExperienceForLevel(level)
-	return math.floor(100 * (1.5 ^ (level - 1)))
-end
+-- Progressive speed calculation
+local function calculateMaxSpeed(flightTime)
+	-- Uses configurable settings for speed progression
+	local baseSpeed = SPEED_CONFIG.BASE_SPEED
+	-- Calculate gradual increase: speed increases by SPEED_INCREASE every TIME_INTERVAL seconds
+	local speedIncrease = (flightTime / SPEED_CONFIG.TIME_INTERVAL) * SPEED_CONFIG.SPEED_INCREASE
+	local maxSpeed = baseSpeed + speedIncrease
 
--- Speed tier unlock requirements
-local function getMaxSpeedTierForLevel(level)
-	if level >= 4 then
-		return 3 -- Max speed tier
-	else
-		return 2 -- Fast flight accessible from level 1
-	end
-end
-
--- Speed multiplier calculation
-local function getSpeedMultiplierForLevel(level)
-	return 1.0 + (level - 1) * 0.2 -- 20% increase per level
+	-- Cap at configured maximum speed
+	return math.min(maxSpeed, SPEED_CONFIG.MAX_SPEED_CAP)
 end
 
 function PlayerStats.new()
 	local stats = table.clone(DEFAULT_STATS)
 
-	-- Calculate initial values
-	stats.maxSpeedTier = getMaxSpeedTierForLevel(stats.level)
-	stats.speedMultiplier = getSpeedMultiplierForLevel(stats.speedLevel)
+	-- Calculate initial max speed
+	stats.maxSpeed = calculateMaxSpeed(stats.flightTime)
 
 	return stats
 end
 
-function PlayerStats.addExperience(stats, amount)
-	stats.experience = stats.experience + amount
+function PlayerStats.addFlightTime(stats, deltaTime)
+	stats.flightTime = stats.flightTime + deltaTime
 
-	-- Check for level up
-	while stats.experience >= stats.experienceToNext do
-		stats.experience = stats.experience - stats.experienceToNext
-		stats.level = stats.level + 1
-		stats.experienceToNext = getExperienceForLevel(stats.level)
-
-		-- Update max speed tier based on new level
-		stats.maxSpeedTier = getMaxSpeedTierForLevel(stats.level)
-
-		print("Level up! New level:", stats.level)
+	-- Update max speed based on new flight time
+	local newMaxSpeed = calculateMaxSpeed(stats.flightTime)
+	if newMaxSpeed > stats.maxSpeed then
+		stats.maxSpeed = newMaxSpeed
+		print("Speed increased! New max speed:", stats.maxSpeed)
 	end
 end
 
-function PlayerStats.upgradeSpeed(stats)
-	stats.speedLevel = stats.speedLevel + 1
-	stats.speedMultiplier = getSpeedMultiplierForLevel(stats.speedLevel)
-	return true
+function PlayerStats.getMaxSpeed(stats)
+	local maxSpeed = stats.maxSpeed or SPEED_CONFIG.BASE_SPEED
+	-- Ensure it doesn't exceed the cap
+	return math.min(maxSpeed, SPEED_CONFIG.MAX_SPEED_CAP)
 end
 
-function PlayerStats.getSpeedTiers(stats)
-	local baseSpeed = 35
-	local tiers = {}
-
-	for i = 1, stats.maxSpeedTier do
-		tiers[i] = math.floor(baseSpeed * stats.speedMultiplier * (1.5 ^ (i - 1)))
-	end
-
-	return tiers
-end
-
--- Helper functions for server
-function PlayerStats.getMaxSpeedTierForLevel(level)
-	return getMaxSpeedTierForLevel(level)
-end
-
-function PlayerStats.getSpeedMultiplierForLevel(level)
-	return getSpeedMultiplierForLevel(level)
+function PlayerStats.getFlightTime(stats)
+	return stats.flightTime or 0
 end
 
 return PlayerStats

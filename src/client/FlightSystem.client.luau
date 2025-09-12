@@ -4,6 +4,17 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+-- ===== CONFIGURABLE FLIGHT SETTINGS =====
+local FLIGHT_CONFIG = {
+	BASE_SPEED = 35, -- Starting max speed (should match PlayerStats)
+	SPEED_INCREASE = 1, -- Speed gained per interval (1 studs/s every 1 second)
+	TIME_INTERVAL = 1, -- Time interval for speed gain (should match PlayerStats)
+	MAX_SPEED_CAP = 250000, -- Maximum possible speed (should match PlayerStats)
+	SPEED_BOOST_MULTIPLIER = 0.5, -- Speed boost per Q press (50% each)
+	MAX_SPEED_BOOSTS = 2, -- Maximum number of speed boosts
+}
+-- =========================================
+
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
@@ -19,6 +30,9 @@ flyingAnimation.AnimationId = "rbxassetid://71254946516017" -- Custom flying ani
 
 local idleFlyingAnimation = Instance.new("Animation")
 idleFlyingAnimation.AnimationId = "rbxassetid://138495817843421" -- New idle flying animation for initial speed and idle
+
+local fastFlyingAnimation = Instance.new("Animation")
+fastFlyingAnimation.AnimationId = "rbxassetid://78872108159546" -- Fast and super speed flying animation
 
 -- Load animations and print status
 local function loadAnimation(animation, name)
@@ -37,6 +51,7 @@ end
 
 local flyingTrack = loadAnimation(flyingAnimation, "Flying")
 local idleFlyingTrack = loadAnimation(idleFlyingAnimation, "Idle Flying")
+local fastFlyingTrack = loadAnimation(fastFlyingAnimation, "Fast Flying")
 
 -- Debug: Check if idle flying track loaded
 if idleFlyingTrack then
@@ -45,14 +60,17 @@ else
 	warn("Idle flying track failed to load!")
 end
 
+-- Debug: Check if fast flying track loaded
+if fastFlyingTrack then
+	print("Fast flying track loaded successfully")
+else
+	warn("Fast flying track failed to load!")
+end
+
 -- Flight system variables
 local isFlying = false
-local speedTier = 0 -- 0: Base, 1: Fast, 2: Super
-local SPEED_TIERS = {
-	35, -- Base flight speed (Tier 1)
-	55, -- Fast flight speed (Tier 2)
-	85, -- Super flight speed (Tier 3)
-}
+local currentSpeed = FLIGHT_CONFIG.BASE_SPEED -- Current flight speed (starts at base speed)
+local speedBoost = 0 -- Speed boost from Q key (0, 1, 2)
 -- Removed unused: currentSpeed/currentAnimTrack
 local moveDirection = Vector3.new()
 -- Removed unused: lastMoveDirection
@@ -202,38 +220,73 @@ end
 -- Player stats integration
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local updateStatsEvent = remotes:WaitForChild("UpdateStats")
-local addExperienceEvent = remotes:WaitForChild("AddExperience")
+local addFlightTimeEvent = remotes:WaitForChild("AddFlightTime")
+local updateActualSpeedEvent = remotes:WaitForChild("UpdateActualSpeed")
+local toggleFlightEvent = remotes:WaitForChild("ToggleFlight")
 
-local maxSpeedTier = 1 -- Default to 1 boost
+local playerMaxSpeed = FLIGHT_CONFIG.BASE_SPEED -- Current player's max speed
+local flightTimeAccumulator = 0 -- Accumulate flight time before sending to server
+local currentActualSpeed = 0 -- Track actual current speed
+local lastPosition = rootPart.Position
+local lastTime = tick()
+local lastSpeedUpdate = 0 -- Track when we last sent speed update
+local targetSpeed = 0 -- Target speed for smoothing
+local currentSmoothedSpeed = 0 -- Current smoothed speed
 
 -- Listen for stats updates
 updateStatsEvent.OnClientEvent:Connect(function(stats)
-	maxSpeedTier = stats.maxSpeedTier
-	print("Updated max speed tier to:", maxSpeedTier)
+	playerMaxSpeed = math.min(stats.maxSpeed or FLIGHT_CONFIG.BASE_SPEED, FLIGHT_CONFIG.MAX_SPEED_CAP)
+	print("Updated max speed to:", playerMaxSpeed)
 end)
 
 -- Wind sound handled via built-in RbxCharacterSounds (FreeFalling) when flying
 
 -- Visual effects
 local function createSonicBoom()
-	-- Create visual boom effect
-	local boom = Instance.new("Part")
-	boom.Shape = Enum.PartType.Ball
-	boom.Size = Vector3.new(1, 1, 1)
-	boom.Material = Enum.Material.Neon
-	boom.Color = Color3.new(1, 1, 1)
-	boom.Transparency = 0.5
-	boom.CanCollide = false
-	boom.CFrame = rootPart.CFrame
-	boom.Parent = workspace
+	-- Create VFX particle animation effect from VFX folder
+	print("Looking for VFX part in VFX folder...")
 
-	local tween = TweenService:Create(boom, TweenInfo.new(0.3), {
-		Size = Vector3.new(20, 20, 20),
-		Transparency = 1,
-	})
-	tween:Play()
+	-- Look for VFX folder in ReplicatedStorage
+	local vfxFolder = game:GetService("ReplicatedStorage"):FindFirstChild("VFX")
+	if not vfxFolder then
+		warn("VFX folder not found in ReplicatedStorage")
+		return
+	end
 
-	game.Debris:AddItem(boom, 0.3)
+	-- Look for the VFX part (try common names)
+	local vfxPart = vfxFolder:FindFirstChild("SonicBoom")
+		or vfxFolder:FindFirstChild("Boom")
+		or vfxFolder:FindFirstChild("Explosion")
+		or vfxFolder:FindFirstChild("Effect")
+
+	-- If no specific part found, get the first BasePart
+	if not vfxPart then
+		for _, child in pairs(vfxFolder:GetChildren()) do
+			if child:IsA("BasePart") then
+				vfxPart = child
+				break
+			end
+		end
+	end
+
+	if vfxPart then
+		print("Found VFX part:", vfxPart.Name)
+
+		-- Clone the VFX part
+		local boomClone = vfxPart:Clone()
+		boomClone.CFrame = rootPart.CFrame
+		boomClone.Parent = workspace
+
+		-- Clean up after the VFX animation completes
+		-- Adjust this delay based on your VFX duration
+		game.Debris:AddItem(boomClone, 0.5) -- Half a second cleanup
+		print("VFX positioned and cleanup scheduled")
+	else
+		warn("No VFX part found in VFX folder. Available parts:")
+		for _, child in pairs(vfxFolder:GetChildren()) do
+			print("- " .. child.ClassName .. ": " .. child.Name)
+		end
+	end
 
 	-- Create and play sonic boom sound with better error handling
 	print("Creating sonic boom sound...")
@@ -340,6 +393,9 @@ local function updateAnimation()
 		if idleFlyingTrack and idleFlyingTrack.IsPlaying then
 			idleFlyingTrack:Stop()
 		end
+		if fastFlyingTrack and fastFlyingTrack.IsPlaying then
+			fastFlyingTrack:Stop()
+		end
 		return
 	end
 
@@ -347,47 +403,62 @@ local function updateAnimation()
 	print(
 		"Animation Update - isFlying:",
 		isFlying,
-		"speedTier:",
-		speedTier,
+		"speedBoost:",
+		speedBoost,
 		"moveDirection.Magnitude:",
 		moveDirection.Magnitude
 	)
 
 	-- Check if we're moving
 	if moveDirection.Magnitude > 0 then
-		-- If we're moving, check speed tier
-		if speedTier == 0 then
-			-- At initial speed, use the new idle flying animation
+		-- If we're moving, check speed boost level
+		if speedBoost == 0 then
+			-- At base speed, use the idle flying animation
 			if not idleFlyingTrack.IsPlaying then
 				idleFlyingTrack:Play()
 			end
-			-- Stop regular flying animation if it's playing
+			-- Always ensure idle animation is at slow speed
+			idleFlyingTrack:AdjustSpeed(0.3) -- Make idle animation slower (30% speed)
+			-- Stop other animations if they're playing
 			if flyingTrack.IsPlaying then
 				flyingTrack:Stop()
 			end
-		else
-			-- At higher speeds, use the regular flying animation
-			if not flyingTrack.IsPlaying then
-				flyingTrack:Play()
+			if fastFlyingTrack and fastFlyingTrack.IsPlaying then
+				fastFlyingTrack:Stop()
 			end
-			-- Stop idle animation if it's playing
+		else
+			-- At boosted speeds, use the fast flying animation
+			if not fastFlyingTrack.IsPlaying then
+				fastFlyingTrack:Play()
+			end
+			-- Stop other animations if they're playing
 			if idleFlyingTrack and idleFlyingTrack.IsPlaying then
-				print("Stopping idle flying animation - higher speed tier")
+				print("Stopping idle flying animation - speed boost active")
 				idleFlyingTrack:Stop()
 			end
-			-- Adjust animation speed based on speed tier
-			local speedMultiplier = 1 + (speedTier * 0.5) -- 1.0x, 1.5x, 2.0x, 2.5x speed
-			flyingTrack:AdjustSpeed(speedMultiplier)
+			if flyingTrack.IsPlaying then
+				flyingTrack:Stop()
+			end
+			-- Adjust animation speed based on speed boost
+			local speedMultiplier = 1 + (speedBoost * 0.1) -- 1.0x, 1.1x, 1.2x speed
+			fastFlyingTrack:AdjustSpeed(speedMultiplier)
 		end
 	else
 		-- If we're not moving, always use the new idle flying animation
 		if flyingTrack.IsPlaying then
 			flyingTrack:Stop()
 		end
+		if fastFlyingTrack and fastFlyingTrack.IsPlaying then
+			fastFlyingTrack:Stop()
+		end
 		-- Play idle flying animation if not already playing
 		if idleFlyingTrack and not idleFlyingTrack.IsPlaying then
 			print("Playing idle flying animation (112074359619626)")
 			idleFlyingTrack:Play()
+		end
+		-- Always ensure idle animation is at slow speed when hovering
+		if idleFlyingTrack and idleFlyingTrack.IsPlaying then
+			idleFlyingTrack:AdjustSpeed(0.3) -- Make idle animation slower (30% speed)
 		end
 	end
 end
@@ -434,7 +505,28 @@ local function updateFlight(deltaTime)
 
 	-- Normalize and apply speed
 	if moveDirection.Magnitude > 0 then
-		moveDirection = moveDirection.Unit * SPEED_TIERS[speedTier + 1]
+		-- Calculate current speed based on player's max speed and boost
+		local baseSpeed = FLIGHT_CONFIG.BASE_SPEED -- Always use base speed for tiers 0, 1, 2
+
+		-- Only apply progression to speed tier 3 (max boost)
+		if speedBoost >= FLIGHT_CONFIG.MAX_SPEED_BOOSTS then
+			baseSpeed = math.min(playerMaxSpeed, FLIGHT_CONFIG.MAX_SPEED_CAP) -- Use progressed speed for tier 3
+		end
+
+		-- Calculate boosted speed with proper capping
+		local boostMultiplier = 1 + speedBoost * FLIGHT_CONFIG.SPEED_BOOST_MULTIPLIER
+		local boostedSpeed = baseSpeed * boostMultiplier
+
+		-- Set target speed and smooth the transition
+		targetSpeed = math.min(boostedSpeed, FLIGHT_CONFIG.MAX_SPEED_CAP)
+
+		-- Smooth speed transitions to prevent glitching
+		local smoothingFactor = 0.1 -- Adjust this for more/less smoothing
+		currentSmoothedSpeed = currentSmoothedSpeed + (targetSpeed - currentSmoothedSpeed) * smoothingFactor
+		currentSpeed = currentSmoothedSpeed
+
+		-- Apply the smoothed speed
+		moveDirection = moveDirection.Unit * currentSpeed
 
 		-- Check if shift lock is active (camera is locked to character)
 		local isShiftLocked = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
@@ -459,9 +551,16 @@ local function updateFlight(deltaTime)
 	else
 		-- When not moving, hover in place by countering gravity
 		rootPart.Velocity = Vector3.new(0, 2, 0) -- Apply upward force to hover
-		if speedTier > 0 then
-			speedTier = 0
-			print("Reset to base speed - stopped moving")
+		if speedBoost > 0 then
+			speedBoost = 0
+			print("Reset speed boost - stopped moving")
+			-- Stop wind sound when dropping back to tier 1
+			if _G.windSound then
+				print("FlightSystem: Stopping wind sound (tier reset)")
+				_G.windSound:Stop()
+				_G.windSound:Destroy()
+				_G.windSound = nil
+			end
 		end
 	end
 
@@ -471,18 +570,50 @@ local function updateFlight(deltaTime)
 	-- Update animations based on movement
 	updateAnimation()
 
+	-- Ensure wind sound only plays on tier 2+
+	if _G.windSound then
+		if (not isFlying) or speedBoost == 0 then
+			print("FlightSystem: Stopping wind sound (guard)")
+			_G.windSound:Stop()
+			_G.windSound:Destroy()
+			_G.windSound = nil
+		end
+	end
+
 	-- Wind handled by RbxCharacterSounds
 
 	-- Award experience for flying
 	if isFlying and moveDirection.Magnitude > 0 then
-		-- Award experience based on speed tier
-		local expGain = 1 + speedTier * 2 -- 1 exp for base, 3 for tier 1, 5 for tier 2, etc.
-		addExperienceEvent:FireServer(expGain)
+		-- Track actual current speed
+		local currentTime = tick()
+		local speedDeltaTime = currentTime - lastTime
+		if speedDeltaTime > 0 then
+			local currentPosition = rootPart.Position
+			local distance = (currentPosition - lastPosition).Magnitude
+			currentActualSpeed = distance / speedDeltaTime
+			lastPosition = currentPosition
+			lastTime = currentTime
+		end
 
-		-- Show XP notification occasionally
-		if math.random(1, 100) <= 10 then -- 10% chance per frame
-			if _G.NotificationSystem then
-				_G.NotificationSystem.showXP(expGain)
+		-- Track flight time for progressive speed gain
+		flightTimeAccumulator = flightTimeAccumulator + deltaTime
+
+		-- Send flight time to server every configured interval for progression
+		if flightTimeAccumulator >= FLIGHT_CONFIG.TIME_INTERVAL then
+			addFlightTimeEvent:FireServer(flightTimeAccumulator)
+			flightTimeAccumulator = 0
+		end
+
+		-- Disabled actual speed tracking - only use time-based progression
+		-- if currentTime - lastSpeedUpdate >= 0.1 then
+		--     updateActualSpeedEvent:FireServer(currentActualSpeed)
+		--     lastSpeedUpdate = currentTime
+		-- end
+
+		-- Show speed increase notification occasionally
+		if math.random(1, 100) <= 2 then -- 2% chance per frame
+			if _G.NotificationSystem and _G.NotificationSystem.showSpeedIncrease then
+				_G.NotificationSystem.showSpeedIncrease(playerMaxSpeed)
 			end
 		end
 	end
@@ -498,6 +629,9 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		isFlying = not isFlying
 
 		if isFlying then
+			-- Enable wind cone effect
+			toggleFlightEvent:FireServer(true)
+
 			-- Immediately get airborne by applying upward velocity
 			rootPart.Velocity = Vector3.new(0, 50, 0)
 
@@ -527,11 +661,31 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 
 			-- Tell RbxCharacterSounds that we're flying
 			if _G.setFlyingState then
+				print("FlightSystem: Calling _G.setFlyingState(true)")
 				_G.setFlyingState(true)
+			else
+				warn("FlightSystem: _G.setFlyingState function not found! RbxCharacterSounds may not be loaded.")
+				-- Try to wait for it to load
+				spawn(function()
+					for i = 1, 10 do
+						wait(0.1)
+						if _G.setFlyingState then
+							print("FlightSystem: _G.setFlyingState found after delay, calling with true")
+							_G.setFlyingState(true)
+							break
+						end
+					end
+				end)
 			end
+
+			-- Wind sound will be created when reaching tier 2+ (speedBoost >= 1)
+			print("FlightSystem: Flight started - wind sound will activate at tier 2+")
 
 			-- Wind handled by RbxCharacterSounds
 		else
+			-- Disable wind cone effect
+			toggleFlightEvent:FireServer(false)
+
 			-- Stop flying - restore normal state
 			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 			humanoid.PlatformStand = false
@@ -543,7 +697,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			humanoid.AutoJumpEnabled = true
 
 			-- Reset flight variables
-			speedTier = 0
+			speedBoost = 0
 			moveDirection = Vector3.new()
 
 			-- Stop all flight animations
@@ -552,6 +706,9 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			end
 			if idleFlyingTrack and idleFlyingTrack.IsPlaying then
 				idleFlyingTrack:Stop()
+			end
+			if fastFlyingTrack and fastFlyingTrack.IsPlaying then
+				fastFlyingTrack:Stop()
 			end
 
 			-- Reset physics
@@ -571,7 +728,18 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 
 			-- Tell RbxCharacterSounds that we're not flying
 			if _G.setFlyingState then
+				print("FlightSystem: Calling _G.setFlyingState(false)")
 				_G.setFlyingState(false)
+			else
+				warn("FlightSystem: _G.setFlyingState function not found!")
+			end
+
+			-- Stop wind sound if it exists
+			if _G.windSound then
+				print("FlightSystem: Stopping wind sound")
+				_G.windSound:Stop()
+				_G.windSound:Destroy()
+				_G.windSound = nil
 			end
 
 			-- Wind handled by RbxCharacterSounds
@@ -579,13 +747,35 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			print("Flight mode disabled - returned to normal walking")
 		end
 	elseif input.KeyCode == Enum.KeyCode.Q and isFlying then
-		-- Increment speed tier and create sonic boom effect
-		if speedTier < maxSpeedTier - 1 then
-			speedTier = speedTier + 1
-			print("Q pressed - Speed tier increased to:", speedTier)
+		-- Increment speed boost and create sonic boom effect
+		if speedBoost < FLIGHT_CONFIG.MAX_SPEED_BOOSTS then
+			speedBoost = speedBoost + 1
+			print("Q pressed - Speed boost increased to:", speedBoost)
 
-			-- Only create sonic boom on speed tier 2 and 3 (not tier 1)
-			if speedTier >= 2 then
+			-- Create wind sound when reaching tier 2+ (speedBoost >= 1)
+			if speedBoost >= 1 and not _G.windSound then
+				print("FlightSystem: Creating wind sound for tier", speedBoost + 1)
+				local windSound = Instance.new("Sound")
+				windSound.SoundId = "rbxasset://sounds/action_falling.ogg"
+				windSound.Volume = 0.6
+				windSound.Looped = true
+				windSound.Parent = rootPart
+
+				-- Try to play the sound
+				local success, error = pcall(function()
+					windSound:Play()
+				end)
+
+				if success then
+					print("FlightSystem: Wind sound started successfully")
+					_G.windSound = windSound
+				else
+					warn("FlightSystem: Failed to play wind sound:", error)
+				end
+			end
+
+			-- Create sonic boom on max boost level
+			if speedBoost >= FLIGHT_CONFIG.MAX_SPEED_BOOSTS then
 				createSonicBoom()
 			end
 
@@ -595,7 +785,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 				updateAnimation()
 			end
 		else
-			print("Q pressed - Already at max speed tier:", maxSpeedTier)
+			print("Q pressed - Already at max speed boost:", speedBoost)
 		end
 	end
 end)
@@ -613,6 +803,7 @@ player.CharacterAdded:Connect(function(newCharacter)
 	-- Reload animations
 	flyingTrack = loadAnimation(flyingAnimation, "Flying")
 	idleFlyingTrack = loadAnimation(idleFlyingAnimation, "Idle Flying")
+	fastFlyingTrack = loadAnimation(fastFlyingAnimation, "Fast Flying")
 
 	-- Debug: Check if idle flying track loaded after respawn
 	if idleFlyingTrack then
@@ -621,9 +812,16 @@ player.CharacterAdded:Connect(function(newCharacter)
 		warn("Idle flying track failed to reload after respawn!")
 	end
 
+	-- Debug: Check if fast flying track loaded after respawn
+	if fastFlyingTrack then
+		print("Fast flying track reloaded successfully after respawn")
+	else
+		warn("Fast flying track failed to reload after respawn!")
+	end
+
 	-- Reset flight state
 	isFlying = false
-	speedTier = 0
+	speedBoost = 0
 	moveDirection = Vector3.new()
 
 	-- Recreate trail

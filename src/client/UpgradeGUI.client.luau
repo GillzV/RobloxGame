@@ -58,12 +58,14 @@ local character = player.Character or player.CharacterAdded:Wait()
 local rootPart = character:WaitForChild("HumanoidRootPart")
 local lastPosition = rootPart.Position
 local lastTime = tick()
+local smoothedSpeed = 0 -- For smooth speed display
+local targetSpeed = 0 -- Target speed for smoothing
 
 -- Speed tiers from FlightSystem
 local SPEED_TIERS = {
 	35, -- Base flight speed (Tier 1)
-	150, -- Fast flight speed (Tier 2)
-	600, -- Super flight speed (Tier 3)
+	70, -- Fast flight speed (Tier 2)
+	85, -- Super flight speed (Tier 3)
 }
 
 -- Function to update current speed display
@@ -74,17 +76,22 @@ local function updateCurrentSpeedDisplay()
 	if deltaTime > 0 then
 		local currentPosition = rootPart.Position
 		local distance = (currentPosition - lastPosition).Magnitude
-		local speed = distance / deltaTime
+		local rawSpeed = distance / deltaTime
 
-		-- Update speed display
-		speedValue.Text = math.floor(speed) .. " studs/s"
+		-- Smooth the speed to prevent glitching
+		targetSpeed = rawSpeed
+		local smoothingFactor = 0.15 -- Adjust this for more/less smoothing
+		smoothedSpeed = smoothedSpeed + (targetSpeed - smoothedSpeed) * smoothingFactor
 
-		-- Update color based on speed tier
-		if speed >= SPEED_TIERS[3] then
+		-- Update speed display with smoothed value
+		speedValue.Text = math.floor(smoothedSpeed) .. " studs/s"
+
+		-- Update color based on smoothed speed tier
+		if smoothedSpeed >= SPEED_TIERS[3] then
 			speedValue.TextColor3 = Color3.fromRGB(255, 100, 0) -- Orange for super speed (Tier 3)
-		elseif speed >= SPEED_TIERS[2] then
+		elseif smoothedSpeed >= SPEED_TIERS[2] then
 			speedValue.TextColor3 = Color3.fromRGB(255, 255, 0) -- Yellow for fast speed (Tier 2)
-		elseif speed >= SPEED_TIERS[1] then
+		elseif smoothedSpeed >= SPEED_TIERS[1] then
 			speedValue.TextColor3 = Color3.fromRGB(0, 200, 255) -- Blue for base speed (Tier 1)
 		else
 			speedValue.TextColor3 = Color3.fromRGB(150, 150, 150) -- Gray for walking
@@ -101,6 +108,8 @@ player.CharacterAdded:Connect(function(newCharacter)
 	rootPart = character:WaitForChild("HumanoidRootPart")
 	lastPosition = rootPart.Position
 	lastTime = tick()
+	smoothedSpeed = 0 -- Reset smoothed speed on respawn
+	targetSpeed = 0
 end)
 
 -- Update current speed display every frame

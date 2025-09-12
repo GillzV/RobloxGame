@@ -1,6 +1,15 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+-- ===== CONFIGURABLE HUD SETTINGS =====
+local HUD_CONFIG = {
+	BASE_SPEED = 35, -- Starting max speed (should match PlayerStats)
+	MAX_SPEED_CAP = 1000, -- Maximum possible speed (should match PlayerStats)
+	SPEED_BOOST_MULTIPLIER = 0.5, -- Speed boost per Q press (should match FlightSystem)
+	MAX_SPEED_BOOSTS = 2, -- Maximum number of speed boosts (should match FlightSystem)
+}
+-- =====================================
+
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
@@ -19,7 +28,7 @@ screenGui.Parent = playerGui
 -- Main HUD frame
 local hudFrame = Instance.new("Frame")
 hudFrame.Name = "HUDFrame"
-hudFrame.Size = UDim2.new(0, 300, 0, 120)
+hudFrame.Size = UDim2.new(0, 300, 0, 60)
 hudFrame.Position = UDim2.new(0, 10, 0, 10)
 hudFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 hudFrame.BorderSizePixel = 0
@@ -53,94 +62,29 @@ local titleCorner = Instance.new("UICorner")
 titleCorner.CornerRadius = UDim.new(0, 8)
 titleCorner.Parent = titleLabel
 
--- Level display
-local levelLabel = Instance.new("TextLabel")
-levelLabel.Name = "LevelLabel"
-levelLabel.Size = UDim2.new(0.5, -5, 0, 25)
-levelLabel.Position = UDim2.new(0, 5, 0, 30)
-levelLabel.BackgroundTransparency = 1
-levelLabel.Text = "Level: 1"
-levelLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-levelLabel.TextScaled = true
-levelLabel.Font = Enum.Font.GothamBold
-levelLabel.Parent = hudFrame
-
--- Experience display
-local expLabel = Instance.new("TextLabel")
-expLabel.Name = "ExpLabel"
-expLabel.Size = UDim2.new(1, -10, 0, 20)
-expLabel.Position = UDim2.new(0, 5, 0, 60)
-expLabel.BackgroundTransparency = 1
-expLabel.Text = "XP: 0 / 100"
-expLabel.TextColor3 = Color3.fromRGB(0, 200, 255)
-expLabel.TextScaled = true
-expLabel.Font = Enum.Font.Gotham
-expLabel.Parent = hudFrame
-
--- Speed tier display
-local speedTierLabel = Instance.new("TextLabel")
-speedTierLabel.Name = "SpeedTierLabel"
-speedTierLabel.Size = UDim2.new(0.5, -5, 0, 20)
-speedTierLabel.Position = UDim2.new(0, 5, 0, 85)
-speedTierLabel.BackgroundTransparency = 1
-speedTierLabel.Text = "Speed Tiers: 1/3"
-speedTierLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-speedTierLabel.TextScaled = true
-speedTierLabel.Font = Enum.Font.Gotham
-speedTierLabel.Parent = hudFrame
-
 -- Max speed display
 local maxSpeedLabel = Instance.new("TextLabel")
 maxSpeedLabel.Name = "MaxSpeedLabel"
-maxSpeedLabel.Size = UDim2.new(0.5, -5, 0, 20)
-maxSpeedLabel.Position = UDim2.new(0.5, 0, 0, 85)
+maxSpeedLabel.Size = UDim2.new(1, -10, 0, 30)
+maxSpeedLabel.Position = UDim2.new(0, 5, 0, 30)
 maxSpeedLabel.BackgroundTransparency = 1
-maxSpeedLabel.Text = "Max Speed: 35"
+maxSpeedLabel.Text = "Max Speed: " .. HUD_CONFIG.BASE_SPEED
 maxSpeedLabel.TextColor3 = Color3.fromRGB(0, 200, 255)
 maxSpeedLabel.TextScaled = true
-maxSpeedLabel.Font = Enum.Font.Gotham
+maxSpeedLabel.Font = Enum.Font.GothamBold
 maxSpeedLabel.Parent = hudFrame
-
--- Speed tiers from FlightSystem (base speeds)
-local BASE_SPEED_TIERS = {
-	35, -- Base flight speed (Tier 1)
-	150, -- Fast flight speed (Tier 2)
-	600, -- Super flight speed (Tier 3)
-}
-
--- Function to calculate max speed based on player stats
-local function calculateMaxSpeed(stats)
-	if not stats then
-		return BASE_SPEED_TIERS[1] -- Default to base speed
-	end
-
-	-- Get the highest speed tier available
-	local maxTier = stats.maxSpeedTier or 1
-	local speedMultiplier = stats.speedMultiplier or 1.0
-
-	-- Calculate max speed using the highest available tier
-	local baseSpeed = BASE_SPEED_TIERS[maxTier] or BASE_SPEED_TIERS[1]
-	local maxSpeed = math.floor(baseSpeed * speedMultiplier)
-
-	return maxSpeed
-end
 
 -- Function to update HUD with new stats
 local function updateHUD(stats)
 	playerStats = stats
 
-	-- Update level
-	levelLabel.Text = "Level: " .. stats.level
+	-- Calculate the maximum possible tier 3 speed
+	local baseMaxSpeed = math.min(stats.maxSpeed or HUD_CONFIG.BASE_SPEED, HUD_CONFIG.MAX_SPEED_CAP)
+	local tier3BoostMultiplier = 1 + HUD_CONFIG.MAX_SPEED_BOOSTS * HUD_CONFIG.SPEED_BOOST_MULTIPLIER
+	local maxTier3Speed = baseMaxSpeed * tier3BoostMultiplier
+	local cappedTier3Speed = math.min(maxTier3Speed, HUD_CONFIG.MAX_SPEED_CAP)
 
-	-- Update experience
-	expLabel.Text = "XP: " .. stats.experience .. " / " .. stats.experienceToNext
-
-	-- Update speed tier display
-	speedTierLabel.Text = "Speed Tiers: " .. stats.maxSpeedTier .. "/3"
-
-	-- Update max speed display
-	local maxSpeed = calculateMaxSpeed(stats)
-	maxSpeedLabel.Text = "Max Speed: " .. maxSpeed
+	maxSpeedLabel.Text = "Max Speed: " .. math.floor(cappedTier3Speed)
 end
 
 -- Listen for stats updates from server
@@ -151,11 +95,8 @@ local function testHUD()
 	-- Create test stats if server data isn't available
 	if not playerStats then
 		local testStats = {
-			level = 1,
-			experience = 25,
-			experienceToNext = 100,
-			maxSpeedTier = 1,
-			speedMultiplier = 1.0,
+			maxSpeed = HUD_CONFIG.BASE_SPEED,
+			flightTime = 0,
 		}
 		updateHUD(testStats)
 		print("Using test stats for HUD")

@@ -23,6 +23,7 @@ local FFlagUserFixCharSoundsEmitters = loadFlag("UserFixCharSoundsEmitters")
 -- Flight system integration
 local isFlying = false
 local function setFlyingState(flying: boolean)
+	print("RbxCharacterSounds: setFlyingState called with:", flying)
 	isFlying = flying
 end
 
@@ -353,7 +354,19 @@ local function initializeSoundSystem(instances: { [string]: Instance })
 		end,
 
 		[sounds.FreeFalling] = function(dt: number, sound: Playable, vel: Vector3): ()
-			if vel.Magnitude > 75 then
+			-- When flying, always play wind sound regardless of speed
+			if isFlying then
+				-- Base volume for flying, with speed-based increase
+				local baseVolume = 0.3
+				local speedVolume = math.clamp(map(vel.Magnitude, 0, 100, 0, 0.7), 0, 0.7)
+				local finalVolume = math.clamp(baseVolume + speedVolume, 0, 1)
+				(sound :: any).Volume = finalVolume
+				-- Debug print every few seconds
+				if math.random() < 0.01 then -- 1% chance per frame
+					print("Wind sound - isFlying:", isFlying, "Speed:", vel.Magnitude, "Volume:", finalVolume)
+				end
+			elseif vel.Magnitude > 75 then
+				-- Original behavior for actual freefalling
 				(sound :: any).Volume = math.clamp((sound :: any).Volume + 0.9 * dt, 0, 1)
 			else
 				(sound :: any).Volume = 0
