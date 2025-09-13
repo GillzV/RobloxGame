@@ -505,23 +505,25 @@ local function updateFlight(deltaTime)
 
 	-- Normalize and apply speed
 	if moveDirection.Magnitude > 0 then
-		-- Calculate current speed based on player's max speed and boost
-		local baseSpeed = FLIGHT_CONFIG.BASE_SPEED -- Always use base speed for tiers 0, 1, 2
+		-- Apply permanent speed multiplier from GUI purchases to base speed calculation
+		local guiMultiplier = _G.speedMultiplier or 1
 
-		-- Only apply progression to speed tier 3 (max boost)
+		-- Recalculate base speed with multiplier applied
+		local baseSpeed = FLIGHT_CONFIG.BASE_SPEED
 		if speedBoost >= FLIGHT_CONFIG.MAX_SPEED_BOOSTS then
-			baseSpeed = math.min(playerMaxSpeed, FLIGHT_CONFIG.MAX_SPEED_CAP) -- Use progressed speed for tier 3
+			baseSpeed = math.min(playerMaxSpeed, FLIGHT_CONFIG.MAX_SPEED_CAP)
 		end
 
-		-- Calculate boosted speed with proper capping
+		-- Apply multiplier to base speed, then apply boost multiplier
+		local multipliedBaseSpeed = baseSpeed * guiMultiplier
 		local boostMultiplier = 1 + speedBoost * FLIGHT_CONFIG.SPEED_BOOST_MULTIPLIER
-		local boostedSpeed = baseSpeed * boostMultiplier
+		local boostedSpeed = multipliedBaseSpeed * boostMultiplier
 
 		-- Set target speed and smooth the transition
 		targetSpeed = math.min(boostedSpeed, FLIGHT_CONFIG.MAX_SPEED_CAP)
 
 		-- Smooth speed transitions to prevent glitching
-		local smoothingFactor = 0.1 -- Adjust this for more/less smoothing
+		local smoothingFactor = 0.1
 		currentSmoothedSpeed = currentSmoothedSpeed + (targetSpeed - currentSmoothedSpeed) * smoothingFactor
 		currentSpeed = currentSmoothedSpeed
 

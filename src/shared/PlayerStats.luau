@@ -30,6 +30,13 @@ local function calculateMaxSpeed(flightTime)
 	return math.min(maxSpeed, SPEED_CONFIG.MAX_SPEED_CAP)
 end
 
+-- Calculate max speed with multiplier applied
+local function calculateMaxSpeedWithMultiplier(flightTime, speedMultiplier)
+	local baseMaxSpeed = calculateMaxSpeed(flightTime)
+	local multipliedSpeed = baseMaxSpeed * (speedMultiplier or 1)
+	return multipliedSpeed
+end
+
 function PlayerStats.new()
 	local stats = table.clone(DEFAULT_STATS)
 
@@ -54,6 +61,13 @@ function PlayerStats.getMaxSpeed(stats)
 	local maxSpeed = stats.maxSpeed or SPEED_CONFIG.BASE_SPEED
 	-- Ensure it doesn't exceed the cap
 	return math.min(maxSpeed, SPEED_CONFIG.MAX_SPEED_CAP)
+end
+
+function PlayerStats.getMaxSpeedWithMultiplier(stats, speedMultiplier)
+	local baseMaxSpeed = calculateMaxSpeed(stats.flightTime or 0)
+	local multipliedSpeed = baseMaxSpeed * (speedMultiplier or 1)
+	-- Apply the cap to the multiplied speed
+	return math.min(multipliedSpeed, SPEED_CONFIG.MAX_SPEED_CAP)
 end
 
 function PlayerStats.getFlightTime(stats)
