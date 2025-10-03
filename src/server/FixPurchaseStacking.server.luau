@@ -1,27 +1,21 @@
--- NEW Stacking Version of ProcessPurchases.server.lua
--- This version supports stacking multipliers instead of only keeping the highest
-
+-- Fix Purchase Stacking - This will override your current ProcessPurchases system
 local Players = game:GetService("Players")
 local MarketplaceService = game:GetService("MarketplaceService")
 local DataStoreService = game:GetService("DataStoreService")
 
--- === YOUR Developer Product IDs ===
-local PROD_T3_2X = 3402098428
-local PROD_T3_50X = 3402098905
-local PROD_T3_100X = 3402099389
-local PROD_T3_500X = 3402099684
+print("=== FIXING PURCHASE STACKING ===")
 
--- Map product -> target Tier-3 max multiplier
-local PRODUCT_TO_T3_MAX_MULT = {
-	[PROD_T3_2X] = 2,
-	[PROD_T3_50X] = 50,
-	[PROD_T3_100X] = 100,
-	[PROD_T3_500X] = 500,
+-- Your product IDs
+local PRODUCT_TO_MULT = {
+	[3402098428] = 2, -- 2x speed
+	[3402098905] = 50, -- 50x speed
+	[3402099389] = 100, -- 100x speed
+	[3402099684] = 500, -- 500x speed
 }
 
 -- DataStores
-local PurchaseHistory = DataStoreService:GetDataStore("PurchaseHistory_v1") -- idempotency only
-local IndividualPurchases = DataStoreService:GetDataStore("IndividualPurchases_v1") -- tracks individual purchases for stacking
+local PurchaseHistory = DataStoreService:GetDataStore("PurchaseHistory_v1")
+local IndividualPurchases = DataStoreService:GetDataStore("IndividualPurchases_v1")
 
 local function loadIndividualPurchases(userId: number): { number }
 	local key = ("u:%d:purchases"):format(userId)
@@ -37,7 +31,6 @@ local function saveIndividualPurchases(userId: number, purchases: { number })
 	pcall(IndividualPurchases.SetAsync, IndividualPurchases, key, purchases)
 end
 
--- Calculate stacked multiplier from individual purchases
 local function calculateStackedMultiplier(purchases: { number }): number
 	local stacked = 1
 	for _, purchase in pairs(purchases) do
@@ -46,15 +39,14 @@ local function calculateStackedMultiplier(purchases: { number }): number
 	return stacked
 end
 
--- Keep individual purchases available for stacking
+-- Load existing purchases when player joins
 Players.PlayerAdded:Connect(function(plr)
 	local individualPurchases = loadIndividualPurchases(plr.UserId)
 	local stackedMultiplier = calculateStackedMultiplier(individualPurchases)
 
-	-- Set the stacked multiplier as the attribute
 	plr:SetAttribute("Tier3PermanentMaxMult", stackedMultiplier)
 
-	print("ProcessPurchasesStacking: Loaded purchases for", plr.Name)
+	print("FIXED: Loaded purchases for", plr.Name)
 	print("  Individual purchases:", table.concat(individualPurchases, ", "))
 	print("  Stacked multiplier:", stackedMultiplier .. "x")
 end)
@@ -64,9 +56,12 @@ Players.PlayerRemoving:Connect(function(plr)
 	saveIndividualPurchases(plr.UserId, individualPurchases)
 end)
 
--- REQUIRED for Developer Products
+-- Override ProcessReceipt to support stacking
 local function processReceipt(receipt)
-	-- Idempotency: "PlayerId_PurchaseId"
+	print("=== PROCESS RECEIPT CALLED (FIXED VERSION) ===")
+	print("Receipt Info:", receipt)
+
+	-- Idempotency check
 	local phKey = ("%d_%s"):format(receipt.PlayerId, receipt.PurchaseId)
 	local okGet, done = pcall(PurchaseHistory.GetAsync, PurchaseHistory, phKey)
 	if not okGet then
@@ -81,31 +76,29 @@ local function processReceipt(receipt)
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
-	local newPurchase = PRODUCT_TO_T3_MAX_MULT[receipt.ProductId]
+	local newPurchase = PRODUCT_TO_MULT[receipt.ProductId]
 	if not newPurchase then
-		warn(("[Purchases] Unmapped product id: %d"):format(receipt.ProductId))
+		warn("Unknown product ID:", receipt.ProductId)
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 
-	-- Get current individual purchases
+	-- Get current purchases and add the new one
 	local individualPurchases = loadIndividualPurchases(player.UserId)
-
-	-- ALWAYS add the purchase (allow repetitive purchasing)
 	table.insert(individualPurchases, newPurchase)
 	saveIndividualPurchases(player.UserId, individualPurchases)
 
 	-- Calculate new stacked multiplier
 	local newStackedMultiplier = calculateStackedMultiplier(individualPurchases)
 
-	-- Update the attribute with the new stacked multiplier
+	-- Update the attribute
 	player:SetAttribute("Tier3PermanentMaxMult", newStackedMultiplier)
 
-	print("ProcessPurchasesStacking: NEW PURCHASE for", player.Name)
+	print("FIXED: NEW PURCHASE for", player.Name)
 	print("  New purchase:", newPurchase .. "x")
 	print("  All purchases:", table.concat(individualPurchases, "x, ") .. "x")
 	print("  New stacked multiplier:", newStackedMultiplier .. "x")
 
-	-- Mark processed
+	-- Mark as processed
 	local okSet = pcall(PurchaseHistory.SetAsync, PurchaseHistory, phKey, true)
 	if not okSet then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
@@ -114,8 +107,44 @@ local function processReceipt(receipt)
 	return Enum.ProductPurchaseDecision.PurchaseGranted
 end
 
+-- OVERRIDE the ProcessReceipt function
 MarketplaceService.ProcessReceipt = processReceipt
 
-print("ProcessPurchasesStacking: NEW STACKING VERSION LOADED!")
-print("This version supports stacking all purchases instead of only keeping the highest")
-print("Ready to handle stacking purchases!")
+print("=== PURCHASE STACKING FIXED ===")
+print("ProcessReceipt has been overridden to support stacking!")
+print("Now when you purchase boosts, they will stack multiplicatively!")
+
+-- Test function to simulate a purchase
+local function testStackingPurchase(player)
+	if not player then
+		player = Players:GetPlayers()[1]
+		if not player then
+			warn("No players found for test")
+			return
+		end
+	end
+
+	print("=== TESTING STACKING PURCHASE ===")
+	local currentValue = player:GetAttribute("Tier3PermanentMaxMult") or 1
+	print("Current multiplier:", currentValue .. "x")
+
+	-- Simulate a 2x purchase
+	local fakeReceipt = {
+		PlayerId = player.UserId,
+		ProductId = 3402098428, -- 2x speed product
+		PlaceIdWherePurchased = game.PlaceId,
+		PurchaseId = "test_" .. tick(),
+	}
+
+	print("Simulating 2x purchase...")
+	local result = processReceipt(fakeReceipt)
+	print("Purchase result:", result)
+
+	local newValue = player:GetAttribute("Tier3PermanentMaxMult")
+	print("New multiplier:", newValue .. "x")
+	print("=== TEST COMPLETE ===")
+end
+
+_G.testStackingPurchase = testStackingPurchase
+
+print("Test with: _G.testStackingPurchase()")

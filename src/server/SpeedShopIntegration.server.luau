@@ -37,43 +37,29 @@ local function updatePlayerSpeedMultiplier(player, newMultiplier)
 	local currentStackedMultiplier = playerSpeedMultipliers[player.UserId] or 1
 	local individualPurchases = playerIndividualPurchases[player.UserId]
 
-	-- Check if this is a new purchase (not just loading existing data)
-	local isNewPurchase = true
+	-- ALWAYS add the purchase (allow repetitive purchasing)
+	table.insert(individualPurchases, newMultiplier)
+
+	-- Calculate new stacked multiplier by multiplying all individual purchases
+	local newStackedMultiplier = 1
 	for _, purchase in pairs(individualPurchases) do
-		if purchase == newMultiplier then
-			isNewPurchase = false
-			break
-		end
+		newStackedMultiplier = newStackedMultiplier * purchase
 	end
 
-	-- If this is a new purchase, add it to our individual purchases and stack it
-	if isNewPurchase then
-		table.insert(individualPurchases, newMultiplier)
+	print("SpeedShopIntegration: NEW PURCHASE DETECTED!")
+	print("  New purchase value:", newMultiplier .. "x")
+	print("  Previous stacked:", currentStackedMultiplier .. "x")
+	print("  Individual purchases:", table.concat(individualPurchases, "x, ") .. "x")
+	print("  New stacked multiplier:", newStackedMultiplier .. "x")
 
-		-- Calculate new stacked multiplier by multiplying all individual purchases
-		local newStackedMultiplier = 1
-		for _, purchase in pairs(individualPurchases) do
-			newStackedMultiplier = newStackedMultiplier * purchase
-		end
+	playerSpeedMultipliers[player.UserId] = newStackedMultiplier
+	_G.playerSpeedMultiplier = newStackedMultiplier
 
-		print("SpeedShopIntegration: NEW PURCHASE DETECTED!")
-		print("  New purchase value:", newMultiplier .. "x")
-		print("  Previous stacked:", currentStackedMultiplier .. "x")
-		print("  Individual purchases:", table.concat(individualPurchases, "x, ") .. "x")
-		print("  New stacked multiplier:", newStackedMultiplier .. "x")
-
-		playerSpeedMultipliers[player.UserId] = newStackedMultiplier
-		_G.playerSpeedMultiplier = newStackedMultiplier
-
-		-- Fire the RemoteEvent to update the client
-		print("SpeedShopIntegration: *** FIRING REMOTEEVENT TO CLIENT ***")
-		print("SpeedShopIntegration: Player:", player.Name, "Multiplier:", newStackedMultiplier .. "x")
-		updateMaxSpeedMultiplierEvent:FireClient(player, newStackedMultiplier)
-		print("SpeedShopIntegration: *** REMOTEEVENT SENT ***")
-	else
-		print("SpeedShopIntegration: EXISTING PURCHASE - no stacking")
-		print("  Purchase value:", newMultiplier .. "x", "(already owned)")
-	end
+	-- Fire the RemoteEvent to update the client
+	print("SpeedShopIntegration: *** FIRING REMOTEEVENT TO CLIENT ***")
+	print("SpeedShopIntegration: Player:", player.Name, "Multiplier:", newStackedMultiplier .. "x")
+	updateMaxSpeedMultiplierEvent:FireClient(player, newStackedMultiplier)
+	print("SpeedShopIntegration: *** REMOTEEVENT SENT ***")
 end
 
 -- Listen for purchases from your existing purchase system
