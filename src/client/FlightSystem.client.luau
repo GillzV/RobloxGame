@@ -235,8 +235,9 @@ local currentSmoothedSpeed = 0 -- Current smoothed speed
 
 -- Listen for stats updates
 updateStatsEvent.OnClientEvent:Connect(function(stats)
+	print("FlightSystem: Received stats update:", stats)
 	playerMaxSpeed = math.min(stats.maxSpeed or FLIGHT_CONFIG.BASE_SPEED, FLIGHT_CONFIG.MAX_SPEED_CAP)
-	print("Updated max speed to:", playerMaxSpeed)
+	print("FlightSystem: Updated max speed to:", playerMaxSpeed)
 end)
 
 -- Wind sound handled via built-in RbxCharacterSounds (FreeFalling) when flying
@@ -508,16 +509,44 @@ local function updateFlight(deltaTime)
 		-- Apply permanent speed multiplier from GUI purchases to base speed calculation
 		local guiMultiplier = _G.speedMultiplier or 1
 
-		-- Recalculate base speed with multiplier applied
-		local baseSpeed = FLIGHT_CONFIG.BASE_SPEED
-		if speedBoost >= FLIGHT_CONFIG.MAX_SPEED_BOOSTS then
-			baseSpeed = math.min(playerMaxSpeed, FLIGHT_CONFIG.MAX_SPEED_CAP)
+		-- Debug: Print multiplier info occasionally
+		if math.random() < 0.001 then -- 0.1% chance per frame
+			print(
+				"FlightSystem Debug - guiMultiplier:",
+				guiMultiplier,
+				"speedBoost:",
+				speedBoost,
+				"playerMaxSpeed:",
+				playerMaxSpeed
+			)
 		end
 
-		-- Apply multiplier to base speed, then apply boost multiplier
-		local multipliedBaseSpeed = baseSpeed * guiMultiplier
+		-- Calculate base speed for different tiers
+		local baseSpeed = FLIGHT_CONFIG.BASE_SPEED
+		if speedBoost >= FLIGHT_CONFIG.MAX_SPEED_BOOSTS then
+			-- Tier 3: Use progressed max speed AND apply speed multiplier from shop
+			baseSpeed = math.min(playerMaxSpeed, FLIGHT_CONFIG.MAX_SPEED_CAP)
+			baseSpeed = baseSpeed * guiMultiplier -- Apply speed shop multiplier only to Tier 3
+
+			-- Debug: Print Tier 3 speed calculation occasionally
+			if math.random() < 0.0005 then -- 0.05% chance per frame
+				print(
+					"Tier 3 Speed - playerMaxSpeed:",
+					playerMaxSpeed,
+					"guiMultiplier:",
+					guiMultiplier,
+					"baseSpeed:",
+					baseSpeed
+				)
+			end
+		else
+			-- Tier 1 & 2: Use base speed without shop multiplier (shop multiplier only affects Tier 3)
+			baseSpeed = FLIGHT_CONFIG.BASE_SPEED
+		end
+
+		-- Apply speed boost multiplier
 		local boostMultiplier = 1 + speedBoost * FLIGHT_CONFIG.SPEED_BOOST_MULTIPLIER
-		local boostedSpeed = multipliedBaseSpeed * boostMultiplier
+		local boostedSpeed = baseSpeed * boostMultiplier
 
 		-- Set target speed and smooth the transition
 		targetSpeed = math.min(boostedSpeed, FLIGHT_CONFIG.MAX_SPEED_CAP)

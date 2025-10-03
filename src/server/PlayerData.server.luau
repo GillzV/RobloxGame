@@ -19,6 +19,10 @@ local DEFAULT_STATS = {
 	-- Progressive speed system
 	maxSpeed = SPEED_CONFIG.BASE_SPEED, -- Current maximum speed (starts at base speed)
 	flightTime = 0, -- Total time spent flying (for speed progression)
+
+	-- Speed shop system
+	speedShopMultiplier = 1, -- Speed shop multiplier (starts at 1x)
+	purchasedMultipliers = {}, -- Track purchased speed multipliers
 }
 
 -- Progressive speed calculation
@@ -67,6 +71,22 @@ end
 
 function PlayerStats.getFlightTime(stats)
 	return stats.flightTime or 0
+end
+
+function PlayerStats.getSpeedShopMultiplier(stats)
+	return stats.speedShopMultiplier or 1
+end
+
+function PlayerStats.setSpeedShopMultiplier(stats, multiplier)
+	stats.speedShopMultiplier = multiplier or 1
+end
+
+function PlayerStats.getPurchasedMultipliers(stats)
+	return stats.purchasedMultipliers or {}
+end
+
+function PlayerStats.setPurchasedMultipliers(stats, purchasedMultipliers)
+	stats.purchasedMultipliers = purchasedMultipliers or {}
 end
 
 local PlayerData = {}
@@ -237,6 +257,45 @@ function PlayerData.addFlightTime(player, deltaTime)
 		return true
 	end
 	return false
+end
+
+-- Function to update player stats (for other server scripts)
+function PlayerData.updatePlayerStats(player, newStats)
+	if newStats then
+		playerStats[player.UserId] = newStats
+		updateClientStats(player)
+		savePlayerData(player)
+		return true
+	end
+	return false
+end
+
+-- Function to update speed shop multiplier
+function PlayerData.updateSpeedShopMultiplier(player, multiplier, purchasedMultipliers)
+	local data = playerStats[player.UserId]
+	if data then
+		PlayerStats.setSpeedShopMultiplier(data, multiplier)
+		if purchasedMultipliers then
+			PlayerStats.setPurchasedMultipliers(data, purchasedMultipliers)
+		end
+		updateClientStats(player)
+		savePlayerData(player)
+		print("SpeedMultiplierHandler: Saved speed shop data for", player.Name, "- Multiplier:", multiplier .. "x")
+		return true
+	end
+	return false
+end
+
+-- Function to get speed shop data
+function PlayerData.getSpeedShopData(player)
+	local data = playerStats[player.UserId]
+	if data then
+		return {
+			multiplier = PlayerStats.getSpeedShopMultiplier(data),
+			purchasedMultipliers = PlayerStats.getPurchasedMultipliers(data),
+		}
+	end
+	return nil
 end
 
 return PlayerData

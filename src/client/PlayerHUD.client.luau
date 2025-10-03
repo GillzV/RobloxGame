@@ -82,13 +82,34 @@ local function updateHUD(stats)
 	local baseMaxSpeed = math.min(stats.maxSpeed or HUD_CONFIG.BASE_SPEED, HUD_CONFIG.MAX_SPEED_CAP)
 	local tier3BoostMultiplier = 1 + HUD_CONFIG.MAX_SPEED_BOOSTS * HUD_CONFIG.SPEED_BOOST_MULTIPLIER
 	local maxTier3Speed = baseMaxSpeed * tier3BoostMultiplier
+
+	-- Apply speed shop multiplier if available (only affects Tier 3)
+	local speedShopMultiplier = _G.speedMultiplier or 1
+	maxTier3Speed = maxTier3Speed * speedShopMultiplier
+
 	local cappedTier3Speed = math.min(maxTier3Speed, HUD_CONFIG.MAX_SPEED_CAP)
 
-	maxSpeedLabel.Text = "Max Speed: " .. math.floor(cappedTier3Speed)
+	maxSpeedLabel.Text = "Max Speed: " .. math.floor(cappedTier3Speed) .. " (Tier 3)"
 end
 
 -- Listen for stats updates from server
 updateStatsEvent.OnClientEvent:Connect(updateHUD)
+
+-- Listen for speed shop multiplier updates
+local function updateHUDFromSpeedShop()
+	if playerStats then
+		updateHUD(playerStats)
+	end
+end
+
+-- Monitor for speed shop multiplier changes
+game:GetService("RunService").Heartbeat:Connect(function()
+	local currentMultiplier = _G.speedMultiplier or 1
+	if _G.lastSpeedShopMultiplier ~= currentMultiplier then
+		_G.lastSpeedShopMultiplier = currentMultiplier
+		updateHUDFromSpeedShop()
+	end
+end)
 
 -- Test function to ensure HUD works
 local function testHUD()
