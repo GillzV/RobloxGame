@@ -78,18 +78,20 @@ maxSpeedLabel.Parent = hudFrame
 local function updateHUD(stats)
 	playerStats = stats
 
-	-- Calculate the maximum possible tier 3 speed
+	-- Calculate the actual fastest Tier 3 speed (base max speed + speed boosts + speed shop multiplier)
 	local baseMaxSpeed = math.min(stats.maxSpeed or HUD_CONFIG.BASE_SPEED, HUD_CONFIG.MAX_SPEED_CAP)
-	local tier3BoostMultiplier = 1 + HUD_CONFIG.MAX_SPEED_BOOSTS * HUD_CONFIG.SPEED_BOOST_MULTIPLIER
-	local maxTier3Speed = baseMaxSpeed * tier3BoostMultiplier
 
-	-- Apply speed shop multiplier if available (only affects Tier 3)
+	-- Apply speed shop multiplier if available
 	local speedShopMultiplier = _G.speedMultiplier or 1
-	maxTier3Speed = maxTier3Speed * speedShopMultiplier
+	local multipliedMaxSpeed = baseMaxSpeed * speedShopMultiplier
 
-	local cappedTier3Speed = math.min(maxTier3Speed, HUD_CONFIG.MAX_SPEED_CAP)
+	-- Apply Tier 3 speed boost multiplier (this is your actual fastest speed)
+	local tier3BoostMultiplier = 1 + HUD_CONFIG.MAX_SPEED_BOOSTS * HUD_CONFIG.SPEED_BOOST_MULTIPLIER
+	local fastestTier3Speed = multipliedMaxSpeed * tier3BoostMultiplier
 
-	maxSpeedLabel.Text = "Max Speed: " .. math.floor(cappedTier3Speed) .. " (Tier 3)"
+	local cappedSpeed = math.min(fastestTier3Speed, HUD_CONFIG.MAX_SPEED_CAP)
+
+	maxSpeedLabel.Text = "Max Speed: " .. math.floor(cappedSpeed) .. " (Tier 3)"
 end
 
 -- Listen for stats updates from server

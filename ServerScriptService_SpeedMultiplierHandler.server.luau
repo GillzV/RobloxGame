@@ -10,7 +10,7 @@ print("Script location:", script:GetFullName())
 print("This script MUST be in ServerScriptService for ProcessReceipt to work!")
 
 -- Wait for the main handler to load
-local mainHandler = require(script.Parent.Parent.src.server.SpeedMultiplierHandler)
+local mainHandler = require(game.ServerStorage.src.server.SpeedShopIntegration)
 
 print("Main handler loaded successfully!")
 print("ProcessReceipt is now properly set up in ServerScriptService")

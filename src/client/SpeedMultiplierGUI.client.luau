@@ -243,7 +243,7 @@ local function createGUI()
 	statusLabel.Size = UDim2.new(1, -20, 0, 25)
 	statusLabel.Position = UDim2.new(0, 10, 0, 190)
 	statusLabel.BackgroundTransparency = 1
-	statusLabel.Text = "Purchase Speed Boosts"
+	statusLabel.Text = "Purchase Speed Boosts (Stack Multipliers)"
 	statusLabel.TextColor3 = Color3.new(0.7, 0.7, 0.7)
 	statusLabel.TextScaled = true
 	statusLabel.Font = Enum.Font.Gotham
@@ -398,16 +398,16 @@ onStudioPurchaseSuccess = function(multiplierIndex)
 end
 
 -- Handle real purchase success (from server confirmation)
-local function onRealPurchaseSuccess(newMultiplier)
+local function onRealPurchaseSuccess(stackedMultiplier)
 	print("=== CLIENT: PURCHASE SUCCESS RECEIVED ===")
-	print("New multiplier from server:", newMultiplier .. "x")
+	print("Total stacked multiplier from server:", stackedMultiplier .. "x")
 	print("Previous multiplier:", _G.speedMultiplier or "nil")
 
-	-- Update our local multiplier
-	_G.speedMultiplier = newMultiplier
-	totalSpeedMultiplier = newMultiplier
+	-- Update our local multiplier with the total stacked value
+	_G.speedMultiplier = stackedMultiplier
+	totalSpeedMultiplier = stackedMultiplier
 
-	print("Updated local multiplier to:", newMultiplier .. "x")
+	print("Updated local multiplier to:", stackedMultiplier .. "x")
 
 	-- Update GUI
 	updateGUI()
@@ -436,7 +436,8 @@ local function initialize()
 	_G.purchasedMultipliers = purchasedMultipliers
 
 	-- Listen for server purchase confirmations and loaded data
-	local updateEvent = game:GetService("ReplicatedStorage"):WaitForChild("UpdateMaxSpeedMultiplier")
+	local remotes = game:GetService("ReplicatedStorage"):WaitForChild("Remotes")
+	local updateEvent = remotes:WaitForChild("UpdateMaxSpeedMultiplier")
 	updateEvent.OnClientEvent:Connect(function(newMultiplier)
 		-- This handles both new purchases and loaded data from DataStore
 		print("Received speed multiplier update from server:", newMultiplier .. "x")
@@ -451,16 +452,15 @@ local function initialize()
 	print("Speed Multiplier GUI initialized")
 end
 
--- TEMPORARILY DISABLED - User will create their own GUI in StarterGui
--- Uncomment the lines below to re-enable this GUI
+-- Re-enabled for testing - you can disable this when you create your custom GUI
 
 -- Initialize when player spawns
--- if player.Character and player.Character:FindFirstChild("Humanoid") then
--- 	initialize()
--- else
--- 	player.CharacterAdded:Connect(function()
--- 		initialize()
--- 	end)
--- end
+if player.Character and player.Character:FindFirstChild("Humanoid") then
+	initialize()
+else
+	player.CharacterAdded:Connect(function()
+		initialize()
+	end)
+end
 
-print("SpeedMultiplierGUI: TEMPORARILY DISABLED - User creating custom GUI in StarterGui")
+print("SpeedMultiplierGUI: ENABLED - You can test speed shop purchases now")

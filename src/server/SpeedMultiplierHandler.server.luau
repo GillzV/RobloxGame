@@ -1,13 +1,14 @@
--- Speed Multiplier Handler (Server-side)
+-- DISABLED - Speed Multiplier Handler (Server-side)
 -- Handles permanent max speed upgrades from Robux purchases
 -- MUST BE IN SERVERSERVICE FOR PROCESSRECEIPT TO WORK
+-- REPLACED BY SpeedShopIntegration.server.luau
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local MarketplaceService = game:GetService("MarketplaceService")
 
 -- Wait for PlayerStats module
-local PlayerStats = require(script.Parent.Parent.shared.PlayerStats)
+local PlayerStats = require(game.ServerStorage.shared.PlayerStats)
 -- Wait for PlayerData module
 local PlayerData = require(script.Parent.PlayerData)
 
@@ -16,9 +17,10 @@ print("Script location:", script:GetFullName())
 print("Is in ServerScriptService:", script.Parent.Name == "ServerScriptService")
 
 -- Create remote events for client-server communication
+local remotes = ReplicatedStorage:WaitForChild("Remotes")
 local updateMaxSpeedMultiplierEvent = Instance.new("RemoteEvent")
 updateMaxSpeedMultiplierEvent.Name = "UpdateMaxSpeedMultiplier"
-updateMaxSpeedMultiplierEvent.Parent = ReplicatedStorage
+updateMaxSpeedMultiplierEvent.Parent = remotes
 
 -- Wait for the stats update event from PlayerData
 local updateStatsEvent = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("UpdateStats")
@@ -48,45 +50,49 @@ local function getPlayerSpeedMultiplier(player)
 	return playerSpeedMultipliers[player.UserId] or 1
 end
 
--- Update player's speed multiplier
-local function updatePlayerSpeedMultiplier(player, multiplier)
-	playerSpeedMultipliers[player.UserId] = multiplier
-	print("SpeedMultiplierHandler: Updated speed multiplier for", player.Name, "to", multiplier .. "x")
+-- Update player's speed multiplier (stacking system)
+local function updatePlayerSpeedMultiplier(player, newMultiplier)
+	-- Get current multiplier (starts at 1)
+	local currentMultiplier = playerSpeedMultipliers[player.UserId] or 1
 
-	-- Update the player's max speed in their stats
-	-- This will affect their base max speed calculation
-	_G.playerSpeedMultiplier = multiplier
+	-- For stacking, we need to calculate the difference and multiply
+	-- If the new multiplier is higher than current, multiply by the difference
+	local stackedMultiplier
+	if newMultiplier > currentMultiplier then
+		-- Calculate the multiplier difference and apply it
+		local multiplierDifference = newMultiplier / currentMultiplier
+		stackedMultiplier = currentMultiplier * multiplierDifference
+	else
+		-- If it's the same or lower, just use the new value
+		stackedMultiplier = newMultiplier
+	end
 
-	-- Update the player's maxSpeed stat to reflect the Tier 3 speed with multiplier
-	-- This ensures the HUD shows the multiplied Tier 3 max speed
+	playerSpeedMultipliers[player.UserId] = stackedMultiplier
+
+	print("SpeedMultiplierHandler: Updated speed multiplier for", player.Name)
+	print("  Previous multiplier:", currentMultiplier .. "x")
+	print("  New purchase multiplier:", newMultiplier .. "x")
+	print("  Total stacked multiplier:", stackedMultiplier .. "x")
+
+	-- Update the global multiplier for the flight system
+	_G.playerSpeedMultiplier = stackedMultiplier
+
+	-- Update the player's stats to reflect the new stacked multiplier
 	local stats = PlayerData.getPlayerStats(player)
 	print("SpeedMultiplierHandler: Retrieved stats for", player.Name, ":", stats)
 	if stats then
-		-- Calculate the base max speed (without any previous multipliers)
-		local baseMaxSpeed = PlayerStats.getMaxSpeed(stats)
-		print("SpeedMultiplierHandler: Base max speed for", player.Name, ":", baseMaxSpeed)
+		local currentMaxSpeed = stats.maxSpeed
+		print("SpeedMultiplierHandler: Current base max speed for", player.Name, ":", currentMaxSpeed)
+		print("SpeedMultiplierHandler: Total speed shop multiplier:", stackedMultiplier .. "x")
 
-		-- Calculate what the Tier 3 speed should be with the new multiplier
-		-- Tier 3 uses the progressed max speed multiplied by the shop multiplier
-		local tier3BaseSpeed = baseMaxSpeed
-		local tier3MaxSpeed = tier3BaseSpeed * multiplier
-
-		-- Update the maxSpeed stat to reflect the new Tier 3 speed
-		stats.maxSpeed = tier3MaxSpeed
-		print(
-			"Updated player's Tier 3 maxSpeed from",
-			baseMaxSpeed,
-			"to",
-			tier3MaxSpeed,
-			"(multiplier:",
-			multiplier .. "x)"
-		)
+		-- Don't modify the base max speed - keep it as the base speed
+		-- The speed shop multiplier will be applied via _G.speedMultiplier
 
 		-- Save the updated stats to PlayerData
 		PlayerData.updatePlayerStats(player, stats)
 
 		-- Also save the speed shop multiplier separately for persistence
-		PlayerData.updateSpeedShopMultiplier(player, multiplier, nil)
+		PlayerData.updateSpeedShopMultiplier(player, stackedMultiplier, nil)
 		print("SpeedMultiplierHandler: Saved updated stats and speed shop data to PlayerData")
 
 		-- Fire the stats update event to update the HUD
@@ -111,80 +117,74 @@ updateMaxSpeedMultiplierEvent.OnServerEvent:Connect(function(player, multiplier)
 	end
 end)
 
--- Handle successful Robux purchases
-local function processReceipt(receiptInfo)
-	print("=== PROCESS RECEIPT CALLED ===")
-	print("Receipt Info:", receiptInfo)
-	print("Player ID:", receiptInfo.PlayerId)
-	print("Product ID:", receiptInfo.ProductId)
+-- Store individual purchases for stacking
+local playerPurchases = {}
 
-	local player = Players:GetPlayerByUserId(receiptInfo.PlayerId)
-	if not player then
-		-- Player left, but we should still grant the purchase
-		print("Player left before purchase could be processed:", receiptInfo.PlayerId)
-		return Enum.ProductPurchaseDecision.NotProcessedYet
-	end
+-- Listen for purchases from your existing purchase system
+Players.PlayerAdded:Connect(function(player)
+	-- Initialize player purchases
+	playerPurchases[player.UserId] = {}
 
-	print("Player found:", player.Name)
-	local productId = receiptInfo.ProductId
-	local currentMultiplier = getPlayerSpeedMultiplier(player)
-	print("Current multiplier for", player.Name, ":", currentMultiplier)
+	print("SpeedMultiplierHandler: Player joined -", player.Name, "UserID:", player.UserId)
+	print("SpeedMultiplierHandler: Initial Tier3PermanentMaxMult:", player:GetAttribute("Tier3PermanentMaxMult") or 1)
 
-	-- Find which multiplier this product ID corresponds to
-	print("Looking for product ID:", productId, "in PRODUCT_IDS table")
-	for i, id in pairs(PRODUCT_IDS) do
-		print("Checking product", i, ":", id)
-		if id == productId then
-			print("MATCH FOUND! Product", i, "matches ID", productId)
+	-- Listen for changes to the Tier3PermanentMaxMult attribute from your purchase system
+	player:GetAttributeChangedSignal("Tier3PermanentMaxMult"):Connect(function()
+		local tier3Multiplier = player:GetAttribute("Tier3PermanentMaxMult") or 1
+		print("SpeedMultiplierHandler: *** TIER3 ATTRIBUTE CHANGED *** for", player.Name, ":", tier3Multiplier .. "x")
 
-			-- For the 2x boost (index 1), we want to double the current multiplier
-			-- For other boosts, we multiply by the boost value
-			local newMultiplier
-			if i == 1 then
-				-- 2x boost: double the current multiplier
-				newMultiplier = currentMultiplier * 2
-			else
-				-- Other boosts: multiply by the boost value
-				newMultiplier = currentMultiplier * MULTIPLIERS[i]
-			end
+		-- For stacking, we need to track individual purchases
+		-- When a new purchase is made, we'll calculate the difference and stack it
+		local currentStackedMultiplier = playerSpeedMultipliers[player.UserId] or 1
+		local newPurchaseMultiplier = tier3Multiplier
 
-			print("Calculated new multiplier:", newMultiplier)
-			updatePlayerSpeedMultiplier(player, newMultiplier)
+		-- If this is a new higher multiplier, calculate the difference and stack it
+		if newPurchaseMultiplier > currentStackedMultiplier then
+			local multiplierDifference = newPurchaseMultiplier / currentStackedMultiplier
+			local newStackedMultiplier = currentStackedMultiplier * multiplierDifference
 
-			print("Granted", MULTIPLIERS[i] .. "x speed boost to", player.Name)
-			print("New total multiplier:", newMultiplier .. "x")
+			playerSpeedMultipliers[player.UserId] = newStackedMultiplier
+			_G.playerSpeedMultiplier = newStackedMultiplier
 
-			-- Notify client of successful purchase
-			updateMaxSpeedMultiplierEvent:FireClient(player, newMultiplier)
+			print("SpeedMultiplierHandler: Stacked multiplier for", player.Name)
+			print("  Previous stacked:", currentStackedMultiplier .. "x")
+			print("  New purchase:", newPurchaseMultiplier .. "x")
+			print("  Difference:", multiplierDifference .. "x")
+			print("  Final stacked:", newStackedMultiplier .. "x")
 
-			return Enum.ProductPurchaseDecision.PurchaseGranted
+			-- Update client
+			print("SpeedMultiplierHandler: *** FIRING REMOTEEVENT TO CLIENT ***")
+			print("SpeedMultiplierHandler: Player:", player.Name, "Multiplier:", newStackedMultiplier .. "x")
+			updateMaxSpeedMultiplierEvent:FireClient(player, newStackedMultiplier)
+			print("SpeedMultiplierHandler: *** REMOTEEVENT SENT ***")
 		end
+	end)
+
+	-- Set initial multiplier when player joins
+	local initialMultiplier = player:GetAttribute("Tier3PermanentMaxMult") or 1
+	if initialMultiplier > 1 then
+		print(
+			"SpeedMultiplierHandler: Loading existing Tier3PermanentMaxMult for",
+			player.Name,
+			":",
+			initialMultiplier .. "x"
+		)
+		playerSpeedMultipliers[player.UserId] = initialMultiplier
+		_G.playerSpeedMultiplier = initialMultiplier
+		updateMaxSpeedMultiplierEvent:FireClient(player, initialMultiplier)
 	end
+end)
 
-	warn("Unknown product ID:", productId, "for player:", player.Name)
-	print("Available product IDs:")
-	for i, id in pairs(PRODUCT_IDS) do
-		print("  [" .. i .. "] = " .. id)
-	end
-	return Enum.ProductPurchaseDecision.NotProcessedYet
-end
-
--- CRITICAL: Set up ProcessReceipt BEFORE any purchases are made
-print("=== SETTING UP PROCESS RECEIPT ===")
-print("Setting up ProcessReceipt function...")
-print("Before setting - ProcessReceipt:", MarketplaceService.ProcessReceipt)
-
--- Set the ProcessReceipt function
-MarketplaceService.ProcessReceipt = processReceipt
-
-print("After setting - ProcessReceipt:", MarketplaceService.ProcessReceipt)
-print("ProcessReceipt function set up successfully!")
-print("ProcessReceipt is now:", MarketplaceService.ProcessReceipt)
-print("=== PROCESS RECEIPT SETUP COMPLETE ===")
+-- NOTE: We don't handle ProcessReceipt here - that's handled by ProcessPurchases.server.lua
+-- This script only listens for the Tier3PermanentMaxMult attribute changes
+print("=== SPEED MULTIPLIER HANDLER: INTEGRATED WITH EXISTING PURCHASE SYSTEM ===")
+print("ProcessReceipt is handled by ProcessPurchases.server.lua")
+print("This script listens for Tier3PermanentMaxMult attribute changes")
 
 -- Clean up when player leaves
 Players.PlayerRemoving:Connect(function(player)
 	playerSpeedMultipliers[player.UserId] = nil
+	playerPurchases[player.UserId] = nil
 end)
 
 -- Handle player joining - load their speed shop data
@@ -244,9 +244,9 @@ local function debugSpeedShop()
 	print("================================")
 end
 
--- Test command to simulate ProcessReceipt call
-local function testProcessReceipt(player)
-	print("=== TESTING PROCESS RECEIPT ===")
+-- Test command to simulate purchase attribute change
+local function testPurchaseAttribute(player)
+	print("=== TESTING PURCHASE ATTRIBUTE CHANGE ===")
 	if not player then
 		player = Players:GetPlayers()[1]
 		if not player then
@@ -256,20 +256,14 @@ local function testProcessReceipt(player)
 	end
 
 	print("Testing with player:", player.Name, "ID:", player.UserId)
+	print("Current Tier3PermanentMaxMult:", player:GetAttribute("Tier3PermanentMaxMult") or 1)
 
-	-- Create a fake receipt for testing
-	local testReceipt = {
-		PlayerId = player.UserId,
-		ProductId = PRODUCT_IDS[1], -- Test with 2x speed boost
-		PlaceIdWherePurchased = game.PlaceId,
-		PurchaseId = "test_" .. tick(),
-	}
+	-- Simulate a purchase by setting the attribute (like your ProcessPurchases.server.lua would)
+	local newMultiplier = 2
+	print("Setting Tier3PermanentMaxMult to:", newMultiplier)
+	player:SetAttribute("Tier3PermanentMaxMult", newMultiplier)
 
-	print("Test receipt:", testReceipt)
-
-	-- Call ProcessReceipt manually
-	local result = processReceipt(testReceipt)
-	print("ProcessReceipt result:", result)
+	print("New Tier3PermanentMaxMult:", player:GetAttribute("Tier3PermanentMaxMult"))
 	print("=== TEST COMPLETE ===")
 end
 
@@ -277,7 +271,7 @@ end
 _G.getPlayerSpeedMultiplier = getPlayerSpeedMultiplier
 _G.updatePlayerSpeedMultiplier = updatePlayerSpeedMultiplier
 _G.debugSpeedShop = debugSpeedShop
-_G.testProcessReceipt = testProcessReceipt
+_G.testPurchaseAttribute = testPurchaseAttribute
 
 print("=== SERVER: SPEED MULTIPLIER HANDLER INITIALIZED ===")
 print("Product IDs configured:")
@@ -289,17 +283,4 @@ print("ProcessReceipt function:", MarketplaceService.ProcessReceipt)
 print("Ready to handle purchases!")
 print("=== IMPORTANT: USE 'START SERVER' (NOT SINGLE PLAYER) TO TEST ===")
 
--- Monitor if ProcessReceipt gets changed
-spawn(function()
-	while true do
-		wait(5) -- Check every 5 seconds
-		if MarketplaceService.ProcessReceipt ~= processReceipt then
-			warn("⚠️ WARNING: ProcessReceipt was changed by another script!")
-			print("Current ProcessReceipt:", MarketplaceService.ProcessReceipt)
-			print("Our ProcessReceipt:", processReceipt)
-			print("Restoring our ProcessReceipt function...")
-			MarketplaceService.ProcessReceipt = processReceipt
-			print("ProcessReceipt restored!")
-		end
-	end
-end)
+-- No ProcessReceipt monitoring needed - using existing ProcessPurchases.server.lua

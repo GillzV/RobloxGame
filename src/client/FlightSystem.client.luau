@@ -524,23 +524,24 @@ local function updateFlight(deltaTime)
 		-- Calculate base speed for different tiers
 		local baseSpeed = FLIGHT_CONFIG.BASE_SPEED
 		if speedBoost >= FLIGHT_CONFIG.MAX_SPEED_BOOSTS then
-			-- Tier 3: Use progressed max speed AND apply speed multiplier from shop
-			baseSpeed = math.min(playerMaxSpeed, FLIGHT_CONFIG.MAX_SPEED_CAP)
-			baseSpeed = baseSpeed * guiMultiplier -- Apply speed shop multiplier only to Tier 3
+			-- Tier 3: Use progressed max speed and apply speed shop multiplier
+			local tier3BaseSpeed = math.min(playerMaxSpeed, FLIGHT_CONFIG.MAX_SPEED_CAP)
+			local speedShopMultiplier = _G.speedMultiplier or 1
+			baseSpeed = tier3BaseSpeed * speedShopMultiplier
 
 			-- Debug: Print Tier 3 speed calculation occasionally
 			if math.random() < 0.0005 then -- 0.05% chance per frame
 				print(
 					"Tier 3 Speed - playerMaxSpeed:",
 					playerMaxSpeed,
-					"guiMultiplier:",
-					guiMultiplier,
+					"speedShopMultiplier:",
+					speedShopMultiplier,
 					"baseSpeed:",
 					baseSpeed
 				)
 			end
 		else
-			-- Tier 1 & 2: Use base speed without shop multiplier (shop multiplier only affects Tier 3)
+			-- Tier 1 & 2: Use base speed (not affected by speed shop multipliers)
 			baseSpeed = FLIGHT_CONFIG.BASE_SPEED
 		end
 
