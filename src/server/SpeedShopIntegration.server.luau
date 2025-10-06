@@ -72,31 +72,19 @@ Players.PlayerAdded:Connect(function(player)
 		local tier3Multiplier = player:GetAttribute("Tier3PermanentMaxMult") or 1
 		print("SpeedShopIntegration: *** TIER3 ATTRIBUTE CHANGED *** for", player.Name, ":", tier3Multiplier .. "x")
 
-		-- For stacking, we need to track individual purchases
-		-- When a new purchase is made, we'll calculate the difference and stack it
-		local currentStackedMultiplier = playerSpeedMultipliers[player.UserId] or 1
-		local newPurchaseMultiplier = tier3Multiplier
+		-- ProcessPurchases already handles all the stacking logic correctly
+		-- Just use the final stacked multiplier directly
+		playerSpeedMultipliers[player.UserId] = tier3Multiplier
+		_G.playerSpeedMultiplier = tier3Multiplier
 
-		-- If this is a new higher multiplier, calculate the difference and stack it
-		if newPurchaseMultiplier > currentStackedMultiplier then
-			local multiplierDifference = newPurchaseMultiplier / currentStackedMultiplier
-			local newStackedMultiplier = currentStackedMultiplier * multiplierDifference
+		print("SpeedShopIntegration: Updated speed multiplier for", player.Name)
+		print("  Final stacked multiplier:", tier3Multiplier .. "x")
 
-			playerSpeedMultipliers[player.UserId] = newStackedMultiplier
-			_G.playerSpeedMultiplier = newStackedMultiplier
-
-			print("SpeedShopIntegration: Stacked multiplier for", player.Name)
-			print("  Previous stacked:", currentStackedMultiplier .. "x")
-			print("  New purchase:", newPurchaseMultiplier .. "x")
-			print("  Difference:", multiplierDifference .. "x")
-			print("  Final stacked:", newStackedMultiplier .. "x")
-
-			-- Update client
-			print("SpeedShopIntegration: *** FIRING REMOTEEVENT TO CLIENT ***")
-			print("SpeedShopIntegration: Player:", player.Name, "Multiplier:", newStackedMultiplier .. "x")
-			updateMaxSpeedMultiplierEvent:FireClient(player, newStackedMultiplier)
-			print("SpeedShopIntegration: *** REMOTEEVENT SENT ***")
-		end
+		-- Update client with the final stacked multiplier
+		print("SpeedShopIntegration: *** FIRING REMOTEEVENT TO CLIENT ***")
+		print("SpeedShopIntegration: Player:", player.Name, "Multiplier:", tier3Multiplier .. "x")
+		updateMaxSpeedMultiplierEvent:FireClient(player, tier3Multiplier)
+		print("SpeedShopIntegration: *** REMOTEEVENT SENT ***")
 	end)
 
 	-- Set initial multiplier when player joins
