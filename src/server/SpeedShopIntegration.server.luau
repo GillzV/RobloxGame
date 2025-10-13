@@ -100,6 +100,17 @@ Players.PlayerAdded:Connect(function(player)
 		_G.playerSpeedMultiplier = initialMultiplier
 		updateMaxSpeedMultiplierEvent:FireClient(player, initialMultiplier)
 	end
+
+	-- Handle character respawns - re-send the multiplier to client
+	player.CharacterAdded:Connect(function()
+		local currentMultiplier = player:GetAttribute("Tier3PermanentMaxMult") or 1
+		if currentMultiplier > 1 then
+			print("SpeedShopIntegration: Player respawned - re-sending multiplier:", currentMultiplier .. "x")
+			playerSpeedMultipliers[player.UserId] = currentMultiplier
+			_G.playerSpeedMultiplier = currentMultiplier
+			updateMaxSpeedMultiplierEvent:FireClient(player, currentMultiplier)
+		end
+	end)
 end)
 
 -- Clean up when player leaves

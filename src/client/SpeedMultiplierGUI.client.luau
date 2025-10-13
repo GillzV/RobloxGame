@@ -454,13 +454,7 @@ end
 
 -- Re-enabled for testing - you can disable this when you create your custom GUI
 
--- Initialize when player spawns
-if player.Character and player.Character:FindFirstChild("Humanoid") then
-	initialize()
-else
-	player.CharacterAdded:Connect(function()
-		initialize()
-	end)
-end
+-- Initialize once when script loads (not on every respawn)
+initialize()
 
 print("SpeedMultiplierGUI: ENABLED - You can test speed shop purchases now")

@@ -20,66 +20,86 @@ local updateStatsEvent = remotes:WaitForChild("UpdateStats")
 -- Player stats
 local playerStats = nil
 
--- Create HUD GUI
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "PlayerHUD"
-screenGui.Parent = playerGui
+-- GUI elements (will be created in createHUD function)
+local screenGui = nil
+local hudFrame = nil
+local maxSpeedLabel = nil
 
--- Main HUD frame
-local hudFrame = Instance.new("Frame")
-hudFrame.Name = "HUDFrame"
-hudFrame.Size = UDim2.new(0, 300, 0, 60)
-hudFrame.Position = UDim2.new(0, 10, 0, 10)
-hudFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-hudFrame.BorderSizePixel = 0
-hudFrame.Parent = screenGui
+-- Function to create the HUD GUI
+local function createHUD()
+	-- Clean up existing GUI if it exists
+	if screenGui then
+		screenGui:Destroy()
+	end
 
--- Corner radius
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 8)
-corner.Parent = hudFrame
+	-- Create HUD GUI
+	screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "PlayerHUD"
+	screenGui.ResetOnSpawn = false -- This prevents GUI from being destroyed on respawn
+	screenGui.Parent = playerGui
 
--- Stroke
-local stroke = Instance.new("UIStroke")
-stroke.Color = Color3.fromRGB(60, 60, 80)
-stroke.Thickness = 2
-stroke.Parent = hudFrame
+	-- Main HUD frame
+	hudFrame = Instance.new("Frame")
+	hudFrame.Name = "HUDFrame"
+	hudFrame.Size = UDim2.new(0, 300, 0, 60)
+	hudFrame.Position = UDim2.new(0, 10, 0, 10)
+	hudFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+	hudFrame.BorderSizePixel = 0
+	hudFrame.Parent = screenGui
 
--- Title
-local titleLabel = Instance.new("TextLabel")
-titleLabel.Name = "TitleLabel"
-titleLabel.Size = UDim2.new(1, 0, 0, 25)
-titleLabel.Position = UDim2.new(0, 0, 0, 0)
-titleLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
-titleLabel.BorderSizePixel = 0
-titleLabel.Text = "PLAYER STATS"
-titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-titleLabel.TextScaled = true
-titleLabel.Font = Enum.Font.GothamBold
-titleLabel.Parent = hudFrame
+	-- Corner radius
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = hudFrame
 
-local titleCorner = Instance.new("UICorner")
-titleCorner.CornerRadius = UDim.new(0, 8)
-titleCorner.Parent = titleLabel
+	-- Stroke
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(60, 60, 80)
+	stroke.Thickness = 2
+	stroke.Parent = hudFrame
 
--- Max speed display
-local maxSpeedLabel = Instance.new("TextLabel")
-maxSpeedLabel.Name = "MaxSpeedLabel"
-maxSpeedLabel.Size = UDim2.new(1, -10, 0, 30)
-maxSpeedLabel.Position = UDim2.new(0, 5, 0, 30)
-maxSpeedLabel.BackgroundTransparency = 1
-maxSpeedLabel.Text = "Max Speed: " .. HUD_CONFIG.BASE_SPEED
-maxSpeedLabel.TextColor3 = Color3.fromRGB(0, 200, 255)
-maxSpeedLabel.TextScaled = true
-maxSpeedLabel.Font = Enum.Font.GothamBold
-maxSpeedLabel.Parent = hudFrame
+	-- Title
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.Name = "TitleLabel"
+	titleLabel.Size = UDim2.new(1, 0, 0, 25)
+	titleLabel.Position = UDim2.new(0, 0, 0, 0)
+	titleLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+	titleLabel.BorderSizePixel = 0
+	titleLabel.Text = "PLAYER STATS"
+	titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	titleLabel.TextScaled = true
+	titleLabel.Font = Enum.Font.GothamBold
+	titleLabel.Parent = hudFrame
+
+	local titleCorner = Instance.new("UICorner")
+	titleCorner.CornerRadius = UDim.new(0, 8)
+	titleCorner.Parent = titleLabel
+
+	-- Max speed display
+	maxSpeedLabel = Instance.new("TextLabel")
+	maxSpeedLabel.Name = "MaxSpeedLabel"
+	maxSpeedLabel.Size = UDim2.new(1, -10, 0, 30)
+	maxSpeedLabel.Position = UDim2.new(0, 5, 0, 30)
+	maxSpeedLabel.BackgroundTransparency = 1
+	maxSpeedLabel.Text = "Max Speed: Loading..."
+	maxSpeedLabel.TextColor3 = Color3.fromRGB(0, 200, 255)
+	maxSpeedLabel.TextScaled = true
+	maxSpeedLabel.Font = Enum.Font.GothamBold
+	maxSpeedLabel.Parent = hudFrame
+
+	print("PlayerHUD: GUI created successfully")
+end
+
+-- Create HUD initially
+createHUD()
 
 -- Function to update HUD with new stats
 local function updateHUD(stats)
 	playerStats = stats
 
 	-- Calculate the actual fastest Tier 3 speed (base max speed + speed boosts + speed shop multiplier)
-	local baseMaxSpeed = math.min(stats.maxSpeed or HUD_CONFIG.BASE_SPEED, HUD_CONFIG.MAX_SPEED_CAP)
+	-- Remove the cap so it shows your actual current highest possible speed
+	local baseMaxSpeed = stats.maxSpeed or HUD_CONFIG.BASE_SPEED
 
 	-- Apply speed shop multiplier if available
 	local speedShopMultiplier = _G.speedMultiplier or 1
@@ -89,9 +109,8 @@ local function updateHUD(stats)
 	local tier3BoostMultiplier = 1 + HUD_CONFIG.MAX_SPEED_BOOSTS * HUD_CONFIG.SPEED_BOOST_MULTIPLIER
 	local fastestTier3Speed = multipliedMaxSpeed * tier3BoostMultiplier
 
-	local cappedSpeed = math.min(fastestTier3Speed, HUD_CONFIG.MAX_SPEED_CAP)
-
-	maxSpeedLabel.Text = "Max Speed: " .. math.floor(cappedSpeed) .. " (Tier 3)"
+	-- Show your actual current highest possible speed (no cap)
+	maxSpeedLabel.Text = "Max Speed: " .. math.floor(fastestTier3Speed) .. " (Tier 3)"
 end
 
 -- Listen for stats updates from server
@@ -113,20 +132,29 @@ game:GetService("RunService").Heartbeat:Connect(function()
 	end
 end)
 
--- Test function to ensure HUD works
-local function testHUD()
-	-- Create test stats if server data isn't available
+-- Function to calculate and display current highest speed
+local function calculateAndDisplayCurrentMaxSpeed()
 	if not playerStats then
-		local testStats = {
+		-- Use default stats if server data isn't available yet
+		local defaultStats = {
 			maxSpeed = HUD_CONFIG.BASE_SPEED,
 			flightTime = 0,
 		}
-		updateHUD(testStats)
-		print("Using test stats for HUD")
+		updateHUD(defaultStats)
 	end
 end
 
--- Run test after a short delay
-task.delay(1, testHUD)
+-- Calculate initial max speed display
+calculateAndDisplayCurrentMaxSpeed()
+
+-- Update max speed whenever speed shop multiplier changes
+local lastKnownMultiplier = 1
+game:GetService("RunService").Heartbeat:Connect(function()
+	local currentMultiplier = _G.speedMultiplier or 1
+	if currentMultiplier ~= lastKnownMultiplier then
+		lastKnownMultiplier = currentMultiplier
+		calculateAndDisplayCurrentMaxSpeed()
+	end
+end)
 
 print("Player HUD loaded successfully!")

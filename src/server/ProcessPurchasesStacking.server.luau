@@ -90,33 +90,20 @@ local function processReceipt(receipt)
 	-- Get current individual purchases
 	local individualPurchases = loadIndividualPurchases(player.UserId)
 
-	-- Check if this purchase was already made
-	local alreadyPurchased = false
-	for _, purchase in pairs(individualPurchases) do
-		if purchase == newPurchase then
-			alreadyPurchased = true
-			break
-		end
-	end
+	-- ALWAYS add the purchase (allow repetitive purchasing for stacking)
+	table.insert(individualPurchases, newPurchase)
+	saveIndividualPurchases(player.UserId, individualPurchases)
 
-	-- If not already purchased, add it to the list
-	if not alreadyPurchased then
-		table.insert(individualPurchases, newPurchase)
-		saveIndividualPurchases(player.UserId, individualPurchases)
+	-- Calculate new stacked multiplier
+	local newStackedMultiplier = calculateStackedMultiplier(individualPurchases)
 
-		-- Calculate new stacked multiplier
-		local newStackedMultiplier = calculateStackedMultiplier(individualPurchases)
+	-- Update the attribute with the new stacked multiplier
+	player:SetAttribute("Tier3PermanentMaxMult", newStackedMultiplier)
 
-		-- Update the attribute with the new stacked multiplier
-		player:SetAttribute("Tier3PermanentMaxMult", newStackedMultiplier)
-
-		print("ProcessPurchasesStacking: New purchase for", player.Name)
-		print("  New purchase:", newPurchase .. "x")
-		print("  All purchases:", table.concat(individualPurchases, "x, ") .. "x")
-		print("  New stacked multiplier:", newStackedMultiplier .. "x")
-	else
-		print("ProcessPurchasesStacking: Purchase already made for", player.Name, ":", newPurchase .. "x")
-	end
+	print("ProcessPurchasesStacking: NEW PURCHASE for", player.Name)
+	print("  New purchase:", newPurchase .. "x")
+	print("  All purchases:", table.concat(individualPurchases, "x, ") .. "x")
+	print("  New stacked multiplier:", newStackedMultiplier .. "x")
 
 	-- Mark processed
 	local okSet = pcall(PurchaseHistory.SetAsync, PurchaseHistory, phKey, true)

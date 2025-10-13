@@ -4,62 +4,97 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- Speed display GUI
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "SpeedDisplay"
-screenGui.Parent = playerGui
-
--- Main speed frame (positioned at bottom center)
-local speedFrame = Instance.new("Frame")
-speedFrame.Name = "SpeedFrame"
-speedFrame.Size = UDim2.new(0, 200, 0, 60)
-speedFrame.Position = UDim2.new(0.5, -100, 1, -80)
-speedFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-speedFrame.BorderSizePixel = 0
-speedFrame.Parent = screenGui
-
--- Corner radius
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 10)
-corner.Parent = speedFrame
-
--- Stroke
-local stroke = Instance.new("UIStroke")
-stroke.Color = Color3.fromRGB(50, 50, 70)
-stroke.Thickness = 2
-stroke.Parent = speedFrame
-
--- Speed label
-local speedLabel = Instance.new("TextLabel")
-speedLabel.Name = "SpeedLabel"
-speedLabel.Size = UDim2.new(1, -10, 0, 25)
-speedLabel.Position = UDim2.new(0, 5, 0, 5)
-speedLabel.BackgroundTransparency = 1
-speedLabel.Text = "CURRENT SPEED"
-speedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-speedLabel.TextScaled = true
-speedLabel.Font = Enum.Font.GothamBold
-speedLabel.Parent = speedFrame
-
--- Speed value
-local speedValue = Instance.new("TextLabel")
-speedValue.Name = "SpeedValue"
-speedValue.Size = UDim2.new(1, -10, 0, 25)
-speedValue.Position = UDim2.new(0, 5, 0, 30)
-speedValue.BackgroundTransparency = 1
-speedValue.Text = "35 studs/s"
-speedValue.TextColor3 = Color3.fromRGB(0, 200, 255)
-speedValue.TextScaled = true
-speedValue.Font = Enum.Font.Gotham
-speedValue.Parent = speedFrame
+-- GUI elements (will be created in createSpeedDisplay function)
+local screenGui = nil
+local speedFrame = nil
+local speedValue = nil
 
 -- Speed calculation variables
-local character = player.Character or player.CharacterAdded:Wait()
-local rootPart = character:WaitForChild("HumanoidRootPart")
-local lastPosition = rootPart.Position
-local lastTime = tick()
+local character = nil
+local rootPart = nil
+local lastPosition = Vector3.new()
+local lastTime = 0
 local smoothedSpeed = 0 -- For smooth speed display
 local targetSpeed = 0 -- Target speed for smoothing
+
+-- Function to create the speed display GUI
+local function createSpeedDisplay()
+	-- Clean up existing GUI if it exists
+	if screenGui then
+		screenGui:Destroy()
+	end
+
+	-- Speed display GUI
+	screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "SpeedDisplay"
+	screenGui.ResetOnSpawn = false -- This prevents GUI from being destroyed on respawn
+	screenGui.Parent = playerGui
+
+	-- Main speed frame (positioned at bottom center)
+	speedFrame = Instance.new("Frame")
+	speedFrame.Name = "SpeedFrame"
+	speedFrame.Size = UDim2.new(0, 200, 0, 60)
+	speedFrame.Position = UDim2.new(0.5, -100, 1, -80)
+	speedFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+	speedFrame.BorderSizePixel = 0
+	speedFrame.Parent = screenGui
+
+	-- Corner radius
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 10)
+	corner.Parent = speedFrame
+
+	-- Stroke
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(50, 50, 70)
+	stroke.Thickness = 2
+	stroke.Parent = speedFrame
+
+	-- Speed label
+	local speedLabel = Instance.new("TextLabel")
+	speedLabel.Name = "SpeedLabel"
+	speedLabel.Size = UDim2.new(1, -10, 0, 25)
+	speedLabel.Position = UDim2.new(0, 5, 0, 5)
+	speedLabel.BackgroundTransparency = 1
+	speedLabel.Text = "CURRENT SPEED"
+	speedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	speedLabel.TextScaled = true
+	speedLabel.Font = Enum.Font.GothamBold
+	speedLabel.Parent = speedFrame
+
+	-- Speed value
+	speedValue = Instance.new("TextLabel")
+	speedValue.Name = "SpeedValue"
+	speedValue.Size = UDim2.new(1, -10, 0, 25)
+	speedValue.Position = UDim2.new(0, 5, 0, 30)
+	speedValue.BackgroundTransparency = 1
+	speedValue.Text = "35 studs/s"
+	speedValue.TextColor3 = Color3.fromRGB(0, 200, 255)
+	speedValue.TextScaled = true
+	speedValue.Font = Enum.Font.Gotham
+	speedValue.Parent = speedFrame
+
+	print("Current Speed Display: GUI created successfully")
+end
+
+-- Function to initialize speed tracking for a character
+local function initializeSpeedTracking(newCharacter)
+	character = newCharacter
+	rootPart = character:WaitForChild("HumanoidRootPart")
+	lastPosition = rootPart.Position
+	lastTime = tick()
+	smoothedSpeed = 0
+	targetSpeed = 0
+	print("Current Speed Display: Speed tracking initialized for new character")
+end
+
+-- Create speed display initially
+createSpeedDisplay()
+
+-- Initialize speed tracking for current character
+if player.Character then
+	initializeSpeedTracking(player.Character)
+end
 
 -- Speed tiers from FlightSystem
 local SPEED_TIERS = {
@@ -104,12 +139,7 @@ end
 
 -- Character respawn handling
 player.CharacterAdded:Connect(function(newCharacter)
-	character = newCharacter
-	rootPart = character:WaitForChild("HumanoidRootPart")
-	lastPosition = rootPart.Position
-	lastTime = tick()
-	smoothedSpeed = 0 -- Reset smoothed speed on respawn
-	targetSpeed = 0
+	initializeSpeedTracking(newCharacter)
 end)
 
 -- Update current speed display every frame
