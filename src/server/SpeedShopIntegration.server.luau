@@ -5,6 +5,9 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+-- Note: PlayerData integration temporarily disabled to fix purchase issues
+-- local PlayerData = require(script.Parent.PlayerData)
+
 print("=== SPEED SHOP INTEGRATION LOADING ===")
 print("Script location:", script:GetFullName())
 
@@ -77,6 +80,9 @@ Players.PlayerAdded:Connect(function(player)
 		playerSpeedMultipliers[player.UserId] = tier3Multiplier
 		_G.playerSpeedMultiplier = tier3Multiplier
 
+		-- PlayerData integration temporarily disabled
+		-- TODO: Re-enable after purchase system is working
+
 		print("SpeedShopIntegration: Updated speed multiplier for", player.Name)
 		print("  Final stacked multiplier:", tier3Multiplier .. "x")
 
@@ -98,6 +104,10 @@ Players.PlayerAdded:Connect(function(player)
 		)
 		playerSpeedMultipliers[player.UserId] = initialMultiplier
 		_G.playerSpeedMultiplier = initialMultiplier
+
+		-- PlayerData integration temporarily disabled
+		-- TODO: Re-enable after purchase system is working
+
 		updateMaxSpeedMultiplierEvent:FireClient(player, initialMultiplier)
 	end
 

@@ -8,9 +8,17 @@ local PlayerStats = {}
 -- ===== CONFIGURABLE SPEED PROGRESSION SETTINGS =====
 local SPEED_CONFIG = {
 	BASE_SPEED = 35, -- Starting max speed
-	SPEED_INCREASE = 1, -- Speed gained per interval (0.1 studs/s every 5 seconds)
-	TIME_INTERVAL = 1, -- Time interval in seconds for speed gain
-	MAX_SPEED_CAP = 1000, -- Maximum possible speed
+	-- Linear gain baseline (studs per TIME_INTERVAL). Keep at 1 to match your design
+	SPEED_INCREASE = 1,
+	TIME_INTERVAL = 1, -- Seconds
+	-- New progression curve controls
+	-- As speed grows, additional gains are scaled down by this curve
+	-- Higher DECAY makes late-game slower. TUNE: 0.000002 .. 0.00001
+	NONLINEAR_DECAY = 0.000004,
+	-- Soften early slowdown with an offset so the first hundreds feel normal
+	SLOW_OFFSET = 250, -- studs
+	-- Raise cap so endgame is reachable but far away
+	MAX_SPEED_CAP = math.huge, -- effectively no cap
 }
 -- ===================================================
 
@@ -25,23 +33,48 @@ local DEFAULT_STATS = {
 	purchasedMultipliers = {}, -- Track purchased speed multipliers
 }
 
--- Progressive speed calculation
-local function calculateMaxSpeed(flightTime)
+-- Progressive speed calculation with speed shop multiplier integration
+local function calculateMaxSpeed(flightTime, speedShopMultiplier)
+	speedShopMultiplier = speedShopMultiplier or 1
 	-- Uses configurable settings for speed progression
 	local baseSpeed = SPEED_CONFIG.BASE_SPEED
-	-- Calculate gradual increase: speed increases by SPEED_INCREASE every TIME_INTERVAL seconds
-	local speedIncrease = (flightTime / SPEED_CONFIG.TIME_INTERVAL) * SPEED_CONFIG.SPEED_INCREASE
-	local maxSpeed = baseSpeed + speedIncrease
+	-- Baseline linear gain (what you'd get without slowdown)
+	local linearGain = (flightTime / SPEED_CONFIG.TIME_INTERVAL) * SPEED_CONFIG.SPEED_INCREASE
+
+	-- Nonlinear slowdown curve: converts linearGain into slower growth at high speeds
+	-- We use a logarithmic-like curve: effectiveGain ≈ log(1 + linearGain * decay) / decay
+	-- With an offset so early game feels close to linear
+	local decay = SPEED_CONFIG.NONLINEAR_DECAY
+	local offset = SPEED_CONFIG.SLOW_OFFSET
+
+	local function slowCurve(x)
+		-- Ensure numeric stability
+		if x <= 0 then
+			return 0
+		end
+		-- ln(1 + decay*(x+offset)) - ln(1 + decay*offset)
+		local a = math.log(1 + decay * (x + offset))
+		local b = math.log(1 + decay * offset)
+		return (a - b) / decay
+	end
+
+	local effectiveGain = slowCurve(linearGain)
+	local baseMaxSpeed = baseSpeed + effectiveGain
+
+	-- Apply speed shop multiplier as a separate boost
+	-- This way the multiplier acts like a permanent speed boost that gets added to your progression
+	local speedBoost = baseMaxSpeed * (speedShopMultiplier - 1)
+	local finalSpeed = baseMaxSpeed + speedBoost
 
 	-- Cap at configured maximum speed
-	return math.min(maxSpeed, SPEED_CONFIG.MAX_SPEED_CAP)
+	return math.min(finalSpeed, SPEED_CONFIG.MAX_SPEED_CAP)
 end
 
 function PlayerStats.new()
 	local stats = table.clone(DEFAULT_STATS)
 
-	-- Calculate initial max speed
-	stats.maxSpeed = calculateMaxSpeed(stats.flightTime)
+	-- Calculate initial max speed with speed shop multiplier
+	stats.maxSpeed = calculateMaxSpeed(stats.flightTime, stats.speedShopMultiplier)
 
 	return stats
 end
@@ -49,8 +82,8 @@ end
 function PlayerStats.addFlightTime(stats, deltaTime)
 	stats.flightTime = stats.flightTime + deltaTime
 
-	-- Update max speed based on new flight time
-	local newMaxSpeed = calculateMaxSpeed(stats.flightTime)
+	-- Update max speed based on new flight time with speed shop multiplier
+	local newMaxSpeed = calculateMaxSpeed(stats.flightTime, stats.speedShopMultiplier)
 	if newMaxSpeed > stats.maxSpeed then
 		stats.maxSpeed = newMaxSpeed
 		print("Speed increased! New max speed:", stats.maxSpeed)
@@ -79,6 +112,9 @@ end
 
 function PlayerStats.setSpeedShopMultiplier(stats, multiplier)
 	stats.speedShopMultiplier = multiplier or 1
+	-- Recalculate max speed with new multiplier
+	stats.maxSpeed = calculateMaxSpeed(stats.flightTime, stats.speedShopMultiplier)
+	print("Speed shop multiplier updated to:", multiplier .. "x, new max speed:", stats.maxSpeed)
 end
 
 function PlayerStats.getPurchasedMultipliers(stats)
@@ -210,6 +246,14 @@ Players.PlayerRemoving:Connect(function(player)
 	savePlayerData(player)
 	playerStats[player.UserId] = nil
 end)
+
+-- Export functions for other scripts to use
+PlayerData.getPlayerStats = function(player)
+	return playerStats[player.UserId]
+end
+
+PlayerData.updateClientStats = updateClientStats
+PlayerData.setSpeedShopMultiplier = PlayerStats.setSpeedShopMultiplier
 
 -- Auto-save data periodically
 spawn(function()

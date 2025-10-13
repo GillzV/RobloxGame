@@ -109,8 +109,15 @@ local function updateHUD(stats)
 	local tier3BoostMultiplier = 1 + HUD_CONFIG.MAX_SPEED_BOOSTS * HUD_CONFIG.SPEED_BOOST_MULTIPLIER
 	local fastestTier3Speed = multipliedMaxSpeed * tier3BoostMultiplier
 
-	-- Show your actual current highest possible speed (no cap)
-	maxSpeedLabel.Text = "Max Speed: " .. math.floor(fastestTier3Speed) .. " (Tier 3)"
+	-- Match flight system's physics-safe compression so displayed max matches achievable current speed
+	local PHYSICS_SAFE_MAX = 4000 -- keep in sync with FlightSystem
+	local effectiveFastest = fastestTier3Speed
+	if effectiveFastest > PHYSICS_SAFE_MAX then
+		effectiveFastest = PHYSICS_SAFE_MAX + (effectiveFastest - PHYSICS_SAFE_MAX) * 0.05
+	end
+
+	-- Show effective, achievable speed (matches flight movement)
+	maxSpeedLabel.Text = "Max Speed: " .. math.floor(effectiveFastest) .. " (Tier 3)"
 end
 
 -- Listen for stats updates from server

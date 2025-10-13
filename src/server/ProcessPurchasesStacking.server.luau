@@ -40,9 +40,12 @@ end
 -- Calculate stacked multiplier from individual purchases
 local function calculateStackedMultiplier(purchases: { number }): number
 	local stacked = 1
+	print("  Calculating stacked multiplier from purchases:", table.concat(purchases, ", "))
 	for _, purchase in pairs(purchases) do
+		print("    Multiplying", stacked .. "x by", purchase .. "x =", (stacked * purchase) .. "x")
 		stacked = stacked * purchase
 	end
+	print("  Final stacked multiplier:", stacked .. "x")
 	return stacked
 end
 
@@ -89,6 +92,9 @@ local function processReceipt(receipt)
 
 	-- Get current individual purchases
 	local individualPurchases = loadIndividualPurchases(player.UserId)
+	print("ProcessPurchasesStacking: BEFORE PURCHASE")
+	print("  Current purchases:", table.concat(individualPurchases, ", "))
+	print("  New purchase to add:", newPurchase .. "x")
 
 	-- ALWAYS add the purchase (allow repetitive purchasing for stacking)
 	table.insert(individualPurchases, newPurchase)
@@ -100,10 +106,11 @@ local function processReceipt(receipt)
 	-- Update the attribute with the new stacked multiplier
 	player:SetAttribute("Tier3PermanentMaxMult", newStackedMultiplier)
 
-	print("ProcessPurchasesStacking: NEW PURCHASE for", player.Name)
-	print("  New purchase:", newPurchase .. "x")
-	print("  All purchases:", table.concat(individualPurchases, "x, ") .. "x")
-	print("  New stacked multiplier:", newStackedMultiplier .. "x")
+	print("ProcessPurchasesStacking: PURCHASE COMPLETE for", player.Name)
+	print("  Added purchase:", newPurchase .. "x")
+	print("  All purchases now:", table.concat(individualPurchases, "x, ") .. "x")
+	print("  Final stacked multiplier:", newStackedMultiplier .. "x")
+	print("  Attribute set to:", player:GetAttribute("Tier3PermanentMaxMult"))
 
 	-- Mark processed
 	local okSet = pcall(PurchaseHistory.SetAsync, PurchaseHistory, phKey, true)

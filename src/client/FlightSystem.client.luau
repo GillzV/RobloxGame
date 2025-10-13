@@ -9,7 +9,7 @@ local FLIGHT_CONFIG = {
 	BASE_SPEED = 35, -- Starting max speed (should match PlayerStats)
 	SPEED_INCREASE = 1, -- Speed gained per interval (1 studs/s every 1 second)
 	TIME_INTERVAL = 1, -- Time interval for speed gain (should match PlayerStats)
-	MAX_SPEED_CAP = 250000, -- Maximum possible speed (should match PlayerStats)
+	MAX_SPEED_CAP = 1e12, -- Remove visible cap in client calc
 	SPEED_BOOST_MULTIPLIER = 0.5, -- Speed boost per Q press (50% each)
 	MAX_SPEED_BOOSTS = 2, -- Maximum number of speed boosts
 }
@@ -400,15 +400,7 @@ local function updateAnimation()
 		return
 	end
 
-	-- Debug: Print current state
-	print(
-		"Animation Update - isFlying:",
-		isFlying,
-		"speedBoost:",
-		speedBoost,
-		"moveDirection.Magnitude:",
-		moveDirection.Magnitude
-	)
+	-- Debug reduced: avoid spam at high frame rates
 
 	-- Check if we're moving
 	if moveDirection.Magnitude > 0 then
@@ -550,14 +542,25 @@ local function updateFlight(deltaTime)
 		local boostedSpeed = baseSpeed * boostMultiplier
 
 		-- Set target speed and smooth the transition
+		-- Apply player desired speed limit (GUI) if enabled
+		local desiredLimit = _G.speedControlEnabled and _G.desiredSpeed or nil
+
+		-- Physics safety clamp: prevent extreme per-frame velocity from freezing
+		local PHYSICS_SAFE_MAX = 4000 -- studs/s
 		targetSpeed = math.min(boostedSpeed, FLIGHT_CONFIG.MAX_SPEED_CAP)
+		if desiredLimit and desiredLimit > 0 then
+			targetSpeed = math.min(targetSpeed, desiredLimit)
+		end
+		if targetSpeed > PHYSICS_SAFE_MAX then
+			targetSpeed = PHYSICS_SAFE_MAX + (targetSpeed - PHYSICS_SAFE_MAX) * 0.05 -- compress extreme speeds
+		end
 
 		-- Smooth speed transitions to prevent glitching
 		local smoothingFactor = 0.1
 		currentSmoothedSpeed = currentSmoothedSpeed + (targetSpeed - currentSmoothedSpeed) * smoothingFactor
 		currentSpeed = currentSmoothedSpeed
 
-		-- Apply the smoothed speed
+		-- Apply the smoothed speed (physics-safe)
 		moveDirection = moveDirection.Unit * currentSpeed
 
 		-- Check if shift lock is active (camera is locked to character)
