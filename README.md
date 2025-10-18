@@ -57,7 +57,7 @@ src/
 │   ├── init.server.luau            # Server initialization
 │   ├── PlayerData.server.luau      # Player data management
 │   ├── BuildingCollapse.server.luau # Building destruction
-│   └── CityGenerator.server.luau   # City generation
+│   
 └── shared/
     └── PlayerStats.luau            # Stats calculation module
 ```

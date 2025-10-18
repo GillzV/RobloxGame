@@ -23,18 +23,57 @@ local PRODUCT_TO_T3_MAX_MULT = {
 local PurchaseHistory = DataStoreService:GetDataStore("PurchaseHistory_v1") -- idempotency only
 local IndividualPurchases = DataStoreService:GetDataStore("IndividualPurchases_v1") -- tracks individual purchases for stacking
 
+-- Simple DS retry helpers (handles transient failures)
+local function getWithRetry(store, key, maxAttempts: number)
+	maxAttempts = maxAttempts or 5
+	local attempt = 0
+	local backoff = 0.5
+	while attempt < maxAttempts do
+		attempt += 1
+		local ok, value = pcall(store.GetAsync, store, key)
+		if ok then
+			return true, value
+		end
+		task.wait(backoff)
+		backoff = math.min(backoff * 2, 5)
+	end
+	return false, nil
+end
+
+local function setWithRetry(store, key, value, maxAttempts: number)
+	maxAttempts = maxAttempts or 5
+	local attempt = 0
+	local backoff = 0.5
+	while attempt < maxAttempts do
+		attempt += 1
+		local ok = pcall(store.SetAsync, store, key, value)
+		if ok then
+			return true
+		end
+		task.wait(backoff)
+		backoff = math.min(backoff * 2, 5)
+	end
+	return false
+end
+
 local function loadIndividualPurchases(userId: number): { number }
 	local key = ("u:%d:purchases"):format(userId)
-	local ok, val = pcall(IndividualPurchases.GetAsync, IndividualPurchases, key)
+	local ok, val = getWithRetry(IndividualPurchases, key, 5)
 	if ok and typeof(val) == "table" then
 		return val
+	end
+	if not ok then
+		warn("[Purchases] Failed to load purchases after retries for userId:", userId)
 	end
 	return {}
 end
 
 local function saveIndividualPurchases(userId: number, purchases: { number })
 	local key = ("u:%d:purchases"):format(userId)
-	pcall(IndividualPurchases.SetAsync, IndividualPurchases, key, purchases)
+	local ok = setWithRetry(IndividualPurchases, key, purchases, 5)
+	if not ok then
+		warn("[Purchases] Failed to save purchases after retries for userId:", userId)
+	end
 end
 
 -- Calculate stacked multiplier from individual purchases
@@ -51,15 +90,23 @@ end
 
 -- Keep individual purchases available for stacking
 Players.PlayerAdded:Connect(function(plr)
-	local individualPurchases = loadIndividualPurchases(plr.UserId)
-	local stackedMultiplier = calculateStackedMultiplier(individualPurchases)
+	-- Attempt to load immediately, then also re-check shortly after join in case of transient DS issues
+	local function loadAndApply()
+		local purchases = loadIndividualPurchases(plr.UserId)
+		local stacked = calculateStackedMultiplier(purchases)
+		plr:SetAttribute("Tier3PermanentMaxMult", stacked)
+		print("ProcessPurchasesStacking: Loaded purchases for", plr.Name)
+		print("  Individual purchases:", #purchases > 0 and table.concat(purchases, ", ") or "<none>")
+		print("  Stacked multiplier:", stacked .. "x")
+	end
 
-	-- Set the stacked multiplier as the attribute
-	plr:SetAttribute("Tier3PermanentMaxMult", stackedMultiplier)
-
-	print("ProcessPurchasesStacking: Loaded purchases for", plr.Name)
-	print("  Individual purchases:", table.concat(individualPurchases, ", "))
-	print("  Stacked multiplier:", stackedMultiplier .. "x")
+	loadAndApply()
+	-- Delayed second attempt to improve reliability when DS is slow
+	task.delay(3, function()
+		if plr.Parent then
+			loadAndApply()
+		end
+	end)
 end)
 
 Players.PlayerRemoving:Connect(function(plr)
@@ -71,7 +118,7 @@ end)
 local function processReceipt(receipt)
 	-- Idempotency: "PlayerId_PurchaseId"
 	local phKey = ("%d_%s"):format(receipt.PlayerId, receipt.PurchaseId)
-	local okGet, done = pcall(PurchaseHistory.GetAsync, PurchaseHistory, phKey)
+	local okGet, done = getWithRetry(PurchaseHistory, phKey, 5)
 	if not okGet then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
@@ -113,7 +160,7 @@ local function processReceipt(receipt)
 	print("  Attribute set to:", player:GetAttribute("Tier3PermanentMaxMult"))
 
 	-- Mark processed
-	local okSet = pcall(PurchaseHistory.SetAsync, PurchaseHistory, phKey, true)
+	local okSet = setWithRetry(PurchaseHistory, phKey, true, 5)
 	if not okSet then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end

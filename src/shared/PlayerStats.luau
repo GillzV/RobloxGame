@@ -7,7 +7,7 @@ local SPEED_CONFIG = {
 	BASE_SPEED = 35, -- Starting max speed
 	SPEED_INCREASE = 1, -- Speed gained per interval (1 studs/s every 1 second)
 	TIME_INTERVAL = 1, -- Time interval in seconds for speed gain
-	MAX_SPEED_CAP = 1000, -- Maximum possible speed
+	MAX_SPEED_CAP = 10000000000000000000000000, -- Maximum possible speed
 }
 -- ===================================================
 

@@ -4,7 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 -- ===== CONFIGURABLE HUD SETTINGS =====
 local HUD_CONFIG = {
 	BASE_SPEED = 35, -- Starting max speed (should match PlayerStats)
-	MAX_SPEED_CAP = 1000, -- Maximum possible speed (should match PlayerStats)
+	MAX_SPEED_CAP = 1000000000000000, -- Maximum possible speed (should match PlayerStats)
 	SPEED_BOOST_MULTIPLIER = 0.5, -- Speed boost per Q press (should match FlightSystem)
 	MAX_SPEED_BOOSTS = 2, -- Maximum number of speed boosts (should match FlightSystem)
 }
@@ -110,7 +110,7 @@ local function updateHUD(stats)
 	local fastestTier3Speed = multipliedMaxSpeed * tier3BoostMultiplier
 
 	-- Match flight system's physics-safe compression so displayed max matches achievable current speed
-	local PHYSICS_SAFE_MAX = 4000 -- keep in sync with FlightSystem
+	local PHYSICS_SAFE_MAX = 4000000000000000 -- keep in sync with FlightSystem
 	local effectiveFastest = fastestTier3Speed
 	if effectiveFastest > PHYSICS_SAFE_MAX then
 		effectiveFastest = PHYSICS_SAFE_MAX + (effectiveFastest - PHYSICS_SAFE_MAX) * 0.05

@@ -9,7 +9,7 @@ local FLIGHT_CONFIG = {
 	BASE_SPEED = 35, -- Starting max speed (should match PlayerStats)
 	SPEED_INCREASE = 1, -- Speed gained per interval (1 studs/s every 1 second)
 	TIME_INTERVAL = 1, -- Time interval for speed gain (should match PlayerStats)
-	MAX_SPEED_CAP = 1e12, -- Remove visible cap in client calc
+	MAX_SPEED_CAP = 1e92, -- Remove visible cap in client calc
 	SPEED_BOOST_MULTIPLIER = 0.5, -- Speed boost per Q press (50% each)
 	MAX_SPEED_BOOSTS = 2, -- Maximum number of speed boosts
 }
