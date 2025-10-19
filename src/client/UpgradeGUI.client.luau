@@ -68,7 +68,7 @@ local function createSpeedDisplay()
 	speedValue.Size = UDim2.new(1, -10, 0, 25)
 	speedValue.Position = UDim2.new(0, 5, 0, 30)
 	speedValue.BackgroundTransparency = 1
-	speedValue.Text = "35 studs/s"
+	speedValue.Text = "35 mph"
 	speedValue.TextColor3 = Color3.fromRGB(0, 200, 255)
 	speedValue.TextScaled = true
 	speedValue.Font = Enum.Font.Gotham
@@ -103,6 +103,24 @@ local SPEED_TIERS = {
 	85, -- Super flight speed (Tier 3)
 }
 
+-- Display smoothing and update cadence
+local DISPLAY_UPDATE_INTERVAL = 0.2 -- seconds between label updates (reduces flicker)
+local lastDisplayUpdate = 0
+local lastDisplayedSpeed = nil
+
+local function ceilToStep(value: number, step: number): number
+	if step <= 0 then
+		return value
+	end
+	return math.ceil(value / step) * step
+end
+
+-- Reset behavior when stopping
+local STOP_THRESHOLD = 8 -- baseline stop threshold (units match computed speed)
+local STOP_RESET_DELAY = 0.01 -- seconds below threshold before we reset to actual speed
+local lastMovingTime = tick()
+local prevIsStopped = false
+
 -- Function to update current speed display
 local function updateCurrentSpeedDisplay()
 	local currentTime = tick()
@@ -113,27 +131,83 @@ local function updateCurrentSpeedDisplay()
 		local distance = (currentPosition - lastPosition).Magnitude
 		local rawSpeed = distance / deltaTime
 
-		-- Smooth the speed to prevent glitching
+		-- Smooth the speed to prevent glitching (lower factor = more smoothing)
 		targetSpeed = rawSpeed
-		local smoothingFactor = 0.15 -- Adjust this for more/less smoothing
+		local smoothingFactor = 0.08
 		smoothedSpeed = smoothedSpeed + (targetSpeed - smoothedSpeed) * smoothingFactor
 
-		-- Update speed display with smoothed value
-		speedValue.Text = math.floor(smoothedSpeed) .. " studs/s"
+		-- Track moving vs stopped state (dynamic threshold helps quick stop-start cases)
+		local effectiveStopThreshold = math.max(STOP_THRESHOLD, (lastDisplayedSpeed or 0) * 0.4)
+		if rawSpeed >= effectiveStopThreshold then
+			lastMovingTime = currentTime
+		end
+		local isStopped = (currentTime - lastMovingTime) >= STOP_RESET_DELAY and rawSpeed < effectiveStopThreshold
 
-		-- Update color based on smoothed speed tier
-		if smoothedSpeed >= SPEED_TIERS[3] then
-			speedValue.TextColor3 = Color3.fromRGB(255, 100, 0) -- Orange for super speed (Tier 3)
-		elseif smoothedSpeed >= SPEED_TIERS[2] then
-			speedValue.TextColor3 = Color3.fromRGB(255, 255, 0) -- Yellow for fast speed (Tier 2)
-		elseif smoothedSpeed >= SPEED_TIERS[1] then
-			speedValue.TextColor3 = Color3.fromRGB(0, 200, 255) -- Blue for base speed (Tier 1)
-		else
-			speedValue.TextColor3 = Color3.fromRGB(150, 150, 150) -- Gray for walking
+		-- On transition to stopped, immediately reflect full reset (0) and then re-round on move
+		if isStopped and not prevIsStopped then
+			-- snap to 0 and push immediate UI update (bypass throttle)
+			smoothedSpeed = 0
+			targetSpeed = 0
+			local displaySpeed = 0
+			if displaySpeed ~= lastDisplayedSpeed then
+				lastDisplayedSpeed = displaySpeed
+				speedValue.Text = tostring(displaySpeed) .. " mph"
+				-- Update color based on smoothed speed tier
+				speedValue.TextColor3 = Color3.fromRGB(150, 150, 150)
+				lastDisplayUpdate = currentTime
+			end
+		end
+
+		-- When stopped, snap smoothing down faster to reflect current speed
+		if isStopped then
+			smoothedSpeed = rawSpeed
+		end
+
+		-- Throttle UI updates and quantize to reduce flicker at high speeds
+		if currentTime - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL then
+			lastDisplayUpdate = currentTime
+
+			-- Dynamic rounding step by tier (bigger steps at higher speeds)
+			local step
+			if smoothedSpeed >= SPEED_TIERS[3] then
+				step = 25
+			elseif smoothedSpeed >= SPEED_TIERS[2] then
+				step = 10
+			else
+				step = 2
+			end
+
+			-- Compute display speed
+			local displaySpeed
+			if isStopped then
+				-- When stopped, keep reset value (0)
+				displaySpeed = 0
+			else
+				-- While moving, round upward and prevent decreases
+				displaySpeed = ceilToStep(smoothedSpeed, step)
+				if lastDisplayedSpeed and displaySpeed < lastDisplayedSpeed then
+					displaySpeed = lastDisplayedSpeed
+				end
+			end
+			if displaySpeed ~= lastDisplayedSpeed then
+				lastDisplayedSpeed = displaySpeed
+				speedValue.Text = tostring(displaySpeed) .. " mph"
+				-- Update color based on smoothed speed tier
+				if smoothedSpeed >= SPEED_TIERS[3] then
+					speedValue.TextColor3 = Color3.fromRGB(255, 100, 0) -- Orange for super speed (Tier 3)
+				elseif smoothedSpeed >= SPEED_TIERS[2] then
+					speedValue.TextColor3 = Color3.fromRGB(255, 255, 0) -- Yellow for fast speed (Tier 2)
+				elseif smoothedSpeed >= SPEED_TIERS[1] then
+					speedValue.TextColor3 = Color3.fromRGB(0, 200, 255) -- Blue for base speed (Tier 1)
+				else
+					speedValue.TextColor3 = Color3.fromRGB(150, 150, 150) -- Gray for walking
+				end
+			end
 		end
 
 		lastPosition = currentPosition
 		lastTime = currentTime
+		prevIsStopped = isStopped
 	end
 end
 
