@@ -36,16 +36,48 @@ local function createHUD()
 	screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "PlayerHUD"
 	screenGui.ResetOnSpawn = false -- This prevents GUI from being destroyed on respawn
+	screenGui.IgnoreGuiInset = true
 	screenGui.Parent = playerGui
 
 	-- Main HUD frame
 	hudFrame = Instance.new("Frame")
 	hudFrame.Name = "HUDFrame"
-	hudFrame.Size = UDim2.new(0, 300, 0, 60)
-	hudFrame.Position = UDim2.new(0, 10, 0, 10)
+	hudFrame.Size = UDim2.new(0, 225, 0, 80)
+	hudFrame.AnchorPoint = Vector2.new(0, 0.5)
+	hudFrame.Position = UDim2.new(0, 10, 0.5, -60)
 	hudFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 	hudFrame.BorderSizePixel = 0
 	hudFrame.Parent = screenGui
+
+	-- Keep HUD vertically aligned with Speed Control GUI if present
+	local function alignWithSpeedControl()
+		local scGui = playerGui:FindFirstChild("SpeedControlGUI")
+		if not scGui then
+			return
+		end
+		local panel = scGui:FindFirstChild("Panel")
+		if not panel then
+			return
+		end
+
+		local function syncY()
+			-- Mirror the Y alignment (scale and offset) and AnchorPoint.Y
+			hudFrame.AnchorPoint = Vector2.new(0, panel.AnchorPoint.Y)
+			hudFrame.Position = UDim2.new(0, 10, panel.Position.Y.Scale, panel.Position.Y.Offset)
+		end
+
+		syncY()
+		panel:GetPropertyChangedSignal("Position"):Connect(syncY)
+		panel:GetPropertyChangedSignal("AnchorPoint"):Connect(syncY)
+	end
+
+	-- Try now, and again when children are added (in case SpeedControlGUI loads later)
+	alignWithSpeedControl()
+	playerGui.ChildAdded:Connect(function(child)
+		if child.Name == "SpeedControlGUI" then
+			alignWithSpeedControl()
+		end
+	end)
 
 	-- Corner radius
 	local corner = Instance.new("UICorner")
