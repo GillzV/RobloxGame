@@ -254,13 +254,19 @@ do
 			addFlightTimeServer.Event:Connect(function(player, deltaTime)
 				local data = playerStats[player.UserId]
 				if data and typeof(deltaTime) == "number" and deltaTime > 0 then
+					local beforeTime = PlayerStats.getFlightTime(data)
 					PlayerStats.addFlightTime(data, deltaTime)
+					local afterTime = PlayerStats.getFlightTime(data)
 					updateClientStats(player)
 					print(
 						"PlayerData: awarded via server signal:",
 						player.Name,
 						"+" .. deltaTime .. "s, max:",
-						data.maxSpeed
+						data.maxSpeed,
+						"flightTime before:",
+						beforeTime,
+						"after:",
+						afterTime
 					)
 				end
 			end)

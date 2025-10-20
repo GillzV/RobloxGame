@@ -31,7 +31,7 @@ end)
 -- CONFIG
 local HOOP_TAGS = { "Hoop", "SpeedHoop", "HoopTrigger" }
 local HOOPS_FOLDER_NAME = "Hoops" -- optional: put all hoop parts here
-local REWARD_SECONDS = 5
+local REWARD_SECONDS = 10
 local TOUCH_COOLDOWN_SEC = 10.0 -- per player, per hoop
 
 -- Track per-hoop debounces to prevent multiple awards while inside the hoop
