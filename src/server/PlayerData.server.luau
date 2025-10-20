@@ -155,6 +155,24 @@ local toggleFlightEvent = Instance.new("RemoteEvent")
 toggleFlightEvent.Name = "ToggleFlight"
 toggleFlightEvent.Parent = remotes
 
+-- Server-only signals for inter-script communication
+local ServerScriptService = game:GetService("ServerScriptService")
+local serverSignals = ServerScriptService:FindFirstChild("ServerSignals")
+if not serverSignals then
+	serverSignals = Instance.new("Folder")
+	serverSignals.Name = "ServerSignals"
+	serverSignals.Parent = ServerScriptService
+end
+
+local addFlightTimeServer = serverSignals:FindFirstChild("AddFlightTimeServer")
+if not addFlightTimeServer then
+	addFlightTimeServer = Instance.new("BindableEvent")
+	addFlightTimeServer.Name = "AddFlightTimeServer"
+	addFlightTimeServer.Parent = serverSignals
+end
+
+-- The event connection is established after playerStats and updateClientStats are defined
+
 -- Player data cache
 local playerStats = {}
 
@@ -223,6 +241,34 @@ local function updateClientStats(player)
 	local data = playerStats[player.UserId]
 	if data then
 		updateStatsEvent:FireClient(player, data)
+	end
+end
+
+-- Wire server signal after locals are defined so awards from HoopRewards work
+do
+	local ServerScriptService = game:GetService("ServerScriptService")
+	local serverSignals = ServerScriptService:FindFirstChild("ServerSignals")
+	if serverSignals then
+		local addFlightTimeServer = serverSignals:FindFirstChild("AddFlightTimeServer")
+		if addFlightTimeServer and addFlightTimeServer:IsA("BindableEvent") then
+			addFlightTimeServer.Event:Connect(function(player, deltaTime)
+				local data = playerStats[player.UserId]
+				if data and typeof(deltaTime) == "number" and deltaTime > 0 then
+					PlayerStats.addFlightTime(data, deltaTime)
+					updateClientStats(player)
+					print(
+						"PlayerData: awarded via server signal:",
+						player.Name,
+						"+" .. deltaTime .. "s, max:",
+						data.maxSpeed
+					)
+				end
+			end)
+		else
+			warn("PlayerData: AddFlightTimeServer not found; HoopRewards grants will be ignored")
+		end
+	else
+		warn("PlayerData: ServerSignals folder not found; HoopRewards grants will be ignored")
 	end
 end
 

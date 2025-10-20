@@ -40,7 +40,7 @@ local purchasedMultipliers = {} -- Track all purchased multipliers
 -- Test mode toggle (set to true to enable test mode even on live servers)
 local TEST_MODE = false -- Set to true to enable test purchases on live servers
 
--- Forward declare functions
+-- Forward declare functio	ns
 local activateSpeedMultiplier
 local updateGUI
 local createStudioPurchaseDialog
